@@ -1,0 +1,36 @@
+name: Importar mes CMI
+
+on:
+  workflow_dispatch:
+    inputs:
+      anio:
+        description: 'Año (ej: 2026)'
+        required: true
+        default: '2026'
+      mes:
+        description: 'Mes (ej: 7)'
+        required: true
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install supabase pandas
+
+      - name: Ejecutar importador
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python src/importador.py ${{ github.event.inputs.anio }} ${{ github.event.inputs.mes }} \
+            datos/input/${{ github.event.inputs.anio }}/${{ github.event.inputs.mes }} \
+            datos/historico
