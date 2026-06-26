@@ -112,11 +112,19 @@ def mostrar_metrica(col, titulo, valor, objetivo, unidad="", estado="⚠️", de
 # ============================================================
 st.markdown("""
 <style>
-    .stApp { background-color: #0a0a0a; }
-    [data-testid="stSidebar"] { background-color: #111111; }
+    .stApp { background-color: #0a0a0a; color: #ffffff; }
+    [data-testid="stSidebar"] { background-color: #111111; color: #ffffff; }
     .stMetric { background: #1a1a1a; padding: 12px; border-radius: 8px; }
-    h1,h2,h3 { color: #ffffff; }
+    .stMetric label { color: #ffffff !important; }
+    .stMetric [data-testid="stMetricValue"] { color: #ffffff !important; }
+    .stMetric [data-testid="stMetricDelta"] { color: #4CAF50 !important; }
+    h1,h2,h3,h4,p,span,div { color: #ffffff; }
     .stDataFrame { background: #1a1a1a; }
+    .stCaption { color: #cccccc !important; }
+    [data-testid="stMarkdownContainer"] p { color: #ffffff; }
+    .stRadio label { color: #ffffff !important; }
+    .stSelectbox label { color: #ffffff !important; }
+    label { color: #ffffff !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -233,6 +241,7 @@ if vista == "📊 Resumen General":
             u = k.get("unidad","")
             if u=="CLP": val = fmt_clp(k["valor"])
             elif u=="%": val = fmt_pct(k["valor"])
+            elif u=="x": val = f"{k['valor']:.2f}x" if k["valor"] else "N/D"
             else: val = str(int(k["valor"])) if k["valor"] else "0"
         else:
             val = k.get("valor_texto","N/D")
