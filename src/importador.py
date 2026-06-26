@@ -295,16 +295,30 @@ def calcular_kpis(anio, mes, carpeta_datos, carpeta_historico):
                 inv_meta += limpiar_monto(v)
 
     # Inversión Google
+    # Inversión Google — lectura directa del archivo por líneas
     inv_google = 0.0
-    for r in google_rows:
-        camp = str(r.get("Campaña",r.get("Campaign",""))).lower()
-        if "total: campaña" in camp or "total: camp" in camp:
-            for k,v in r.items():
-                if not k: continue
-                k_n = str(k).lower().replace("á","a").replace("é","e").replace("ó","o").replace("ú","u")
-                if "costo" in k_n or "coste" in k_n or "cost" in k_n:
-                    val = limpiar_monto(v)
-                    if val > 0: inv_google = val; break
+    if f_goo and os.path.exists(f_goo):
+        try:
+            with open(f_goo, encoding='utf-8-sig') as fg:
+                glines = fg.readlines()
+            # Encontrar headers
+            header_g = None
+            for gl in glines:
+                if "Costo" in gl and "Estado" in gl:
+                    header_g = gl.strip().split(',')
+                    break
+            # Buscar fila Total: Campañas
+            for gl in glines:
+                if gl.startswith('Total: Campañas'):
+                    parts = gl.strip().split(',')
+                    if header_g and 'Costo' in header_g:
+                        idx = header_g.index('Costo')
+                        inv_google = limpiar_monto(parts[idx]) if idx < len(parts) else 0
+                    else:
+                        inv_google = limpiar_monto(parts[8]) if len(parts) > 8 else 0
+                    break
+        except Exception as eg:
+            print(f"  ⚠️  Google Ads: {eg}")
 
     n_meta=len(p_meta); n_google=len(p_google)
     nota_cpa = "" if es_valido else "⚠️ Trazabilidad <90%"
