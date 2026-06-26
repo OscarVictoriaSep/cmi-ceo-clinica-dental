@@ -289,16 +289,22 @@ def calcular_kpis(anio, mes, carpeta_datos, carpeta_historico):
     inv_meta = 0.0
     for r in meta_rows:
         for k,v in r.items():
-            if k and "importe" in str(k).lower() and "gastado" in str(k).lower():
+            if not k: continue
+            k_n = str(k).lower().replace("á","a").replace("é","e").replace("ó","o").replace("ú","u")
+            if "importe" in k_n and "gastado" in k_n:
                 inv_meta += limpiar_monto(v)
 
     # Inversión Google
     inv_google = 0.0
     for r in google_rows:
         camp = str(r.get("Campaña",r.get("Campaign",""))).lower()
-        if "total" in camp:
+        if "total: campaña" in camp or "total: camp" in camp:
             for k,v in r.items():
-                if k and "costo" in str(k).lower(): inv_google += limpiar_monto(v); break
+                if not k: continue
+                k_n = str(k).lower().replace("á","a").replace("é","e").replace("ó","o").replace("ú","u")
+                if "costo" in k_n or "coste" in k_n or "cost" in k_n:
+                    val = limpiar_monto(v)
+                    if val > 0: inv_google = val; break
 
     n_meta=len(p_meta); n_google=len(p_google)
     nota_cpa = "" if es_valido else "⚠️ Trazabilidad <90%"
