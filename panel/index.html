@@ -6,7 +6,6 @@
 <title>CEO Clínica Dental — Panel Comercial</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://unpkg.com/react-is@18/umd/react-is.production.min.js"></script>
 <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
@@ -61,1195 +60,2462 @@
   }, true);
 </script>
 
-<script type="text/babel" data-presets="react,env">
+<script>
 try {
+  if (!window.React) throw new Error("React no cargó. Revisa tu conexión a internet y recarga la página.");
+  if (!window.ReactDOM) throw new Error("ReactDOM no cargó. Revisa tu conexión a internet y recarga la página.");
+  if (!window.Papa) throw new Error("PapaParse no cargó. Revisa tu conexión a internet y recarga la página.");
+  if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a internet y recarga la página.");
+  if (!window.supabase) throw new Error("La librería de Supabase no cargó. Revisa tu conexión a internet y recarga la página.");
+  const {
+    useState,
+    useEffect,
+    useMemo,
+    useRef
+  } = React;
+  const {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    LineChart,
+    Line,
+    Legend,
+    Cell
+  } = Recharts;
 
-if (!window.React) throw new Error("React no cargó. Revisa tu conexión a internet y recarga la página.");
-if (!window.ReactDOM) throw new Error("ReactDOM no cargó. Revisa tu conexión a internet y recarga la página.");
-if (!window.Papa) throw new Error("PapaParse no cargó. Revisa tu conexión a internet y recarga la página.");
-if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a internet y recarga la página.");
-if (!window.supabase) throw new Error("La librería de Supabase no cargó. Revisa tu conexión a internet y recarga la página.");
+  /* ═══════════════════ CONFIGURACIÓN SUPABASE ═══════════════════ */
+  const SUPABASE_URL = "https://imhtzamtahmnrwndeylt.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_2ERQh_kOPE5uKuZHP9sHCA_zrTpxCQU";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const { useState, useEffect, useMemo, useRef } = React;
-const {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Legend, Cell
-} = Recharts;
+  /* ═══════════════════ CONSTANTES ═══════════════════ */
+  const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const MES_ABR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const MES_IDX = Object.fromEntries(MESES.map((m, i) => [m.toLowerCase(), i + 1]));
+  const CATEGORIAS = ["ORTODONCIA", "IMPLANTOLOGÍA", "REHABILITACIÓN ORAL", "ODONTOLOGÍA GENERAL", "ENDODONCIA", "PERIODONCIA", "ODONTOLOGIA ESTETICA", "CIRUGIA ORAL", "ALINEADORES", "ESTETICA FACIAL", "PRODUCTOS VENTAS", "Laboratorios", "Promociones General", "Promociones Especialistas"];
+  const METAS = {
+    ingresoAtencion: 45000,
+    atenciones: 487,
+    pacientesUnicos: 415,
+    produccionSillon: 10986906,
+    trazabilidad: 0.90,
+    roas: 3.5,
+    casosOrto: 12,
+    casosImpl: 11,
+    clubOtros: 12754839,
+    clubOrto: 5094270,
+    clubTotal: 17849110,
+    clubPctOtros: 0.70,
+    afiliacion: 0.70,
+    retorno: 0.60,
+    referidos: 3,
+    ingresoReferidos: 600000
+  };
 
-/* ═══════════════════ CONFIGURACIÓN SUPABASE ═══════════════════ */
-const SUPABASE_URL = "https://imhtzamtahmnrwndeylt.supabase.co";
-const SUPABASE_KEY = "sb_publishable_2ERQh_kOPE5uKuZHP9sHCA_zrTpxCQU";
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-/* ═══════════════════ CONSTANTES ═══════════════════ */
-const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-               "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-const MES_ABR = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-const MES_IDX = Object.fromEntries(MESES.map((m,i)=>[m.toLowerCase(), i+1]));
-
-const CATEGORIAS = [
-  "ORTODONCIA","IMPLANTOLOGÍA","REHABILITACIÓN ORAL","ODONTOLOGÍA GENERAL",
-  "ENDODONCIA","PERIODONCIA","ODONTOLOGIA ESTETICA","CIRUGIA ORAL","ALINEADORES",
-  "ESTETICA FACIAL","PRODUCTOS VENTAS","Laboratorios","Promociones General",
-  "Promociones Especialistas"
-];
-
-const METAS = {
-  ingresoAtencion: 45000, atenciones: 487, pacientesUnicos: 415,
-  produccionSillon: 10986906, trazabilidad: 0.90, roas: 3.5,
-  casosOrto: 12, casosImpl: 11,
-  clubOtros: 12754839, clubOrto: 5094270, clubTotal: 17849110, clubPctOtros: 0.70,
-  afiliacion: 0.70, retorno: 0.60, referidos: 3, ingresoReferidos: 600000,
-};
-
-/* ═══════════════════ UTILIDADES ═══════════════════ */
-const normRut = (s) => String(s ?? "").trim().toUpperCase().replace(/[.\s]/g, "");
-
-const normCat = (c) => {
-  const s = String(c ?? "").trim();
-  if (!s) return "";
-  const u = s.toUpperCase();
-  if (u === "ACCIONES DE ORTODONCIA" || u === "ORTODONCIA") return "ORTODONCIA";
-  if (u.includes("REHABILITACI")) return "REHABILITACIÓN ORAL";
-  if (u.includes("IMPLANTOLOG")) return "IMPLANTOLOGÍA";
-  return s;
-};
-
-const toNum = (v) => {
-  if (v === null || v === undefined || v === "") return 0;
-  if (typeof v === "number") return v;
-  let s = String(v).replace(/[$\s]/g, "");
-  if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
-  else if (s.includes(",")) {
-    const p = s.split(",");
-    s = (p.length === 2 && p[1].length <= 2) ? s.replace(",", ".") : s.replace(/,/g, "");
-  } else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, "");
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const pKey = (mes, anio) => {
-  const mi = MES_IDX[String(mes ?? "").trim().toLowerCase()];
-  const a = parseInt(anio, 10);
-  if (!mi || !a) return null;
-  return `${a}-${String(mi).padStart(2, "0")}`;
-};
-
-const pSerial = (k) => { const [a,m] = k.split("-").map(Number); return a*12 + m; };
-const pLabel  = (k) => { const [a,m] = k.split("-").map(Number); return `${MES_ABR[m-1]} ${a}`; };
-const pLargo  = (k) => { const [a,m] = k.split("-").map(Number); return `${MESES[m-1]} ${a}`; };
-
-const clp = (n) => (n === null || n === undefined || !Number.isFinite(n))
-  ? "—" : "$" + Math.round(n).toLocaleString("es-CL");
-const clpK = (n) => {
-  if (!Number.isFinite(n)) return "—";
-  if (Math.abs(n) >= 1e6) return "$" + (n/1e6).toFixed(1) + "M";
-  if (Math.abs(n) >= 1e3) return "$" + Math.round(n/1e3) + "K";
-  return "$" + Math.round(n);
-};
-const pct = (n, d=1) => Number.isFinite(n) ? (n*100).toFixed(d) + "%" : "—";
-const xN  = (n) => Number.isFinite(n) ? n.toFixed(2) + "x" : "—";
-const ent = (n) => Number.isFinite(n) ? Math.round(n).toLocaleString("es-CL") : "—";
-
-const canalDe = (r) => {
-  const u = String(r ?? "").trim().toUpperCase();
-  if (u === "REDES SOCIALES") return "META";
-  if (u === "GOOGLE") return "GOOGLE";
-  if (u.startsWith("REFERIDO")) return "REFERIDOS";
-  if (u === "ORGANICO" || u === "ORGÁNICO") return "ORGANICO";
-  return u ? "OTRO" : "";
-};
-
-const PIEZA_RE = /^\d+\s*:/;
-const esImplanteValido = (prest) => {
-  const p = String(prest ?? "").toLowerCase();
-  return !p.includes("corona sobre impl") && !p.includes("pilar sobre impl");
-};
-
-const A_PID=0, A_RUT=1, A_PER=2, A_FEC=3, A_PRE=4, A_PAG=5,
-      A_CON=6, A_CAT=7, A_TRA=8, A_PZA=9, A_DOC=10;
-const P_PER=0, P_PID=1, P_REF=4;
-
-function mapAcciones(rows) {
-  const out = new Map();
-  let ignoradas = 0;
-  for (const r of rows) {
-    const per = pKey(r["Mes de realización"], r["Año de realización"]);
-    const pid = String(r["# Paciente"] ?? "").trim();
-    if (!per || !pid) { ignoradas++; continue; }
-    const fila = {
-      periodo: per, pid, rut: normRut(r["RUT Paciente"]),
-      fecha: String(r["Fecha de realización"] ?? "").trim(),
-      prestacion: String(r["Nombre Prestación"] ?? "").trim(),
-      pagado: toNum(r["Pagado Paciente Prestación (Abonado)"]),
-      convenio: String(r["Convenio Paciente"] ?? "").trim().toUpperCase(),
-      categoria: normCat(r["Nombre Categoria"]),
-      tratamiento: String(r["# Tratamiento"] ?? "").trim(),
-      pieza: String(r["Pieza Tratada"] ?? "").trim(),
-      doctor: `${String(r["Nombre Profesional Realizador"] ?? "").trim()} ${String(r["Apellidos Profesional Realizador"] ?? "").trim()}`.trim(),
-    };
-    if (!out.has(per)) out.set(per, []);
-    out.get(per).push(fila);
-  }
-  return { grupos: out, ignoradas };
-}
-
-function mapPacientes(rows) {
-  const out = new Map();
-  let ignoradas = 0;
-  for (const r of rows) {
-    const per = pKey(r["Mes de afiliación"], r["Año de afiliación"]);
-    const pid = String(r["# Paciente"] ?? "").trim();
-    if (!per || !pid) { ignoradas++; continue; }
-    const fila = {
-      periodo: per, pid, rut: normRut(r["RUT Paciente"]),
-      referencia: String(r["Referencia Paciente"] ?? "").trim().toUpperCase(),
-    };
-    if (!out.has(per)) out.set(per, []);
-    out.get(per).push(fila);
-  }
-  return { grupos: out, ignoradas };
-}
-
-/* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
-const accToArr = (r) => [r.pid, r.rut||"", r.periodo, r.fecha||"", r.prestacion||"", Number(r.pagado)||0,
-                          r.convenio||"", r.categoria||"", r.tratamiento||"", r.pieza||"", r.doctor||""];
-const pnToArr  = (r) => [r.periodo, r.pid, r.rut||"", "", r.referencia||""];
-
-/* ═══════════════════ CÁLCULO DE INDICADORES ═══════════════════ */
-function construirIndices(acc, pn) {
-  const pidsNuevos = new Set(pn.map(r => r[P_PID]));
-  const primeraOrto = new Map();
-  const primeraImpl = new Map();
-  for (const f of acc) {
-    const per = f[A_PER];
-    if (f[A_CAT] === "ORTODONCIA" && pidsNuevos.has(f[A_PID])) {
-      const prev = primeraOrto.get(f[A_PID]);
-      if (!prev || per < prev) primeraOrto.set(f[A_PID], per);
+  /* ═══════════════════ UTILIDADES ═══════════════════ */
+  const normRut = s => String(s ?? "").trim().toUpperCase().replace(/[.\s]/g, "");
+  const normCat = c => {
+    const s = String(c ?? "").trim();
+    if (!s) return "";
+    const u = s.toUpperCase();
+    if (u === "ACCIONES DE ORTODONCIA" || u === "ORTODONCIA") return "ORTODONCIA";
+    if (u.includes("REHABILITACI")) return "REHABILITACIÓN ORAL";
+    if (u.includes("IMPLANTOLOG")) return "IMPLANTOLOGÍA";
+    return s;
+  };
+  const toNum = v => {
+    if (v === null || v === undefined || v === "") return 0;
+    if (typeof v === "number") return v;
+    let s = String(v).replace(/[$\s]/g, "");
+    if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");else if (s.includes(",")) {
+      const p = s.split(",");
+      s = p.length === 2 && p[1].length <= 2 ? s.replace(",", ".") : s.replace(/,/g, "");
+    } else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, "");
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const pKey = (mes, anio) => {
+    const mi = MES_IDX[String(mes ?? "").trim().toLowerCase()];
+    const a = parseInt(anio, 10);
+    if (!mi || !a) return null;
+    return `${a}-${String(mi).padStart(2, "0")}`;
+  };
+  const pSerial = k => {
+    const [a, m] = k.split("-").map(Number);
+    return a * 12 + m;
+  };
+  const pLabel = k => {
+    const [a, m] = k.split("-").map(Number);
+    return `${MES_ABR[m - 1]} ${a}`;
+  };
+  const pLargo = k => {
+    const [a, m] = k.split("-").map(Number);
+    return `${MESES[m - 1]} ${a}`;
+  };
+  const clp = n => n === null || n === undefined || !Number.isFinite(n) ? "—" : "$" + Math.round(n).toLocaleString("es-CL");
+  const clpK = n => {
+    if (!Number.isFinite(n)) return "—";
+    if (Math.abs(n) >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
+    if (Math.abs(n) >= 1e3) return "$" + Math.round(n / 1e3) + "K";
+    return "$" + Math.round(n);
+  };
+  const pct = (n, d = 1) => Number.isFinite(n) ? (n * 100).toFixed(d) + "%" : "—";
+  const xN = n => Number.isFinite(n) ? n.toFixed(2) + "x" : "—";
+  const ent = n => Number.isFinite(n) ? Math.round(n).toLocaleString("es-CL") : "—";
+  const canalDe = r => {
+    const u = String(r ?? "").trim().toUpperCase();
+    if (u === "REDES SOCIALES") return "META";
+    if (u === "GOOGLE") return "GOOGLE";
+    if (u.startsWith("REFERIDO")) return "REFERIDOS";
+    if (u === "ORGANICO" || u === "ORGÁNICO") return "ORGANICO";
+    return u ? "OTRO" : "";
+  };
+  const PIEZA_RE = /^\d+\s*:/;
+  const esImplanteValido = prest => {
+    const p = String(prest ?? "").toLowerCase();
+    return !p.includes("corona sobre impl") && !p.includes("pilar sobre impl");
+  };
+  const A_PID = 0,
+    A_RUT = 1,
+    A_PER = 2,
+    A_FEC = 3,
+    A_PRE = 4,
+    A_PAG = 5,
+    A_CON = 6,
+    A_CAT = 7,
+    A_TRA = 8,
+    A_PZA = 9,
+    A_DOC = 10;
+  const P_PER = 0,
+    P_PID = 1,
+    P_REF = 4;
+  function mapAcciones(rows) {
+    const out = new Map();
+    let ignoradas = 0;
+    for (const r of rows) {
+      const per = pKey(r["Mes de realización"], r["Año de realización"]);
+      const pid = String(r["# Paciente"] ?? "").trim();
+      if (!per || !pid) {
+        ignoradas++;
+        continue;
+      }
+      const fila = {
+        periodo: per,
+        pid,
+        rut: normRut(r["RUT Paciente"]),
+        fecha: String(r["Fecha de realización"] ?? "").trim(),
+        prestacion: String(r["Nombre Prestación"] ?? "").trim(),
+        pagado: toNum(r["Pagado Paciente Prestación (Abonado)"]),
+        convenio: String(r["Convenio Paciente"] ?? "").trim().toUpperCase(),
+        categoria: normCat(r["Nombre Categoria"]),
+        tratamiento: String(r["# Tratamiento"] ?? "").trim(),
+        pieza: String(r["Pieza Tratada"] ?? "").trim(),
+        doctor: `${String(r["Nombre Profesional Realizador"] ?? "").trim()} ${String(r["Apellidos Profesional Realizador"] ?? "").trim()}`.trim()
+      };
+      if (!out.has(per)) out.set(per, []);
+      out.get(per).push(fila);
     }
-    if (f[A_CAT] === "IMPLANTOLOGÍA" && f[A_PZA] && PIEZA_RE.test(f[A_PZA]) && esImplanteValido(f[A_PRE])) {
-      const k = f[A_PID] + "|" + f[A_PZA];
-      const prev = primeraImpl.get(k);
-      if (!prev || per < prev) primeraImpl.set(k, per);
-    }
-  }
-  const pagoPorPid = new Map();
-  const pagoPorPidPer = new Map();
-  for (const f of acc) {
-    pagoPorPid.set(f[A_PID], (pagoPorPid.get(f[A_PID]) || 0) + f[A_PAG]);
-    const k = f[A_PID] + "|" + f[A_PER];
-    pagoPorPidPer.set(k, (pagoPorPidPer.get(k) || 0) + f[A_PAG]);
-  }
-  return { primeraOrto, primeraImpl, pagoPorPid, pagoPorPidPer, pidsNuevos };
-}
-
-function calcularPeriodo(per, acc, pn, inversion, idx) {
-  const accP = acc.filter(f => f[A_PER] === per);
-  const pnP  = pn.filter(r => r[P_PER] === per);
-
-  const facturacion = accP.reduce((s,f) => s + f[A_PAG], 0);
-  const atenciones = new Set(accP.map(f => f[A_PID] + "|" + f[A_FEC])).size;
-  const pacUnicos = new Set(accP.map(f => f[A_PID])).size;
-  const ingAtencion = atenciones ? facturacion / atenciones : 0;
-  const prodSillon = facturacion / 3;
-
-  const totalPN = pnP.length;
-  const conRef = pnP.filter(r => r[P_REF] !== "").length;
-  const trazabilidad = totalPN ? conRef / totalPN : null;
-
-  const porCanal = { META: [], GOOGLE: [], REFERIDOS: [], ORGANICO: [], OTRO: [] };
-  for (const r of pnP) {
-    const c = canalDe(r[P_REF]);
-    if (porCanal[c]) porCanal[c].push(r[P_PID]);
-  }
-
-  const inv = inversion[per] || { meta: 0, google: 0 };
-  const canalKpi = (pids, gasto) => {
-    const n = pids.length;
-    const ingMes = pids.reduce((s,p) => s + (idx.pagoPorPidPer.get(p + "|" + per) || 0), 0);
-    const ingAcum = pids.reduce((s,p) => s + (idx.pagoPorPid.get(p) || 0), 0);
     return {
-      pacientes: n, inversion: gasto || 0, ingMes, ingAcum,
-      cpa: (n && gasto) ? gasto / n : null,
-      roasMes: gasto ? ingMes / gasto : null,
-      roasAcum: gasto ? ingAcum / gasto : null,
+      grupos: out,
+      ignoradas
     };
-  };
-  const meta = canalKpi(porCanal.META, inv.meta);
-  const google = canalKpi(porCanal.GOOGLE, inv.google);
-  const referidos = {
-    pacientes: porCanal.REFERIDOS.length,
-    ingMes: porCanal.REFERIDOS.reduce((s,p) => s + (idx.pagoPorPidPer.get(p + "|" + per) || 0), 0),
-    ingAcum: porCanal.REFERIDOS.reduce((s,p) => s + (idx.pagoPorPid.get(p) || 0), 0),
-  };
-  const organico = porCanal.ORGANICO.length;
-
-  const mixMap = new Map();
-  for (const f of accP) mixMap.set(f[A_CAT], (mixMap.get(f[A_CAT]) || 0) + f[A_PAG]);
-  const mix = CATEGORIAS.map(c => ({ categoria: c, monto: mixMap.get(c) || 0 }));
-  const sumaListadas = mix.reduce((s,m) => s + m.monto, 0);
-  const otras = facturacion - sumaListadas;
-  if (Math.abs(otras) > 0.5) mix.push({ categoria: "OTRAS (no clasificadas)", monto: otras });
-  mix.forEach(m => { m.pct = facturacion ? m.monto / facturacion : 0; });
-
-  let casosOrto = 0;
-  idx.primeraOrto.forEach(p => { if (p === per) casosOrto++; });
-  let casosImpl = 0;
-  idx.primeraImpl.forEach(p => { if (p === per) casosImpl++; });
-
-  const accClub = accP.filter(f => f[A_CON] === "CLUB SONRISA CEO");
-  const clubOrto = accClub.filter(f => f[A_CAT] === "ORTODONCIA").reduce((s,f) => s + f[A_PAG], 0);
-  const clubTotal = accClub.reduce((s,f) => s + f[A_PAG], 0);
-  const clubOtros = clubTotal - clubOrto;
-
-  const docMap = new Map();
-  for (const f of accP) {
-    if (!f[A_DOC]) continue;
-    docMap.set(f[A_DOC], (docMap.get(f[A_DOC]) || 0) + f[A_PAG]);
   }
-  const doctores = [...docMap.entries()]
-    .map(([doctor, monto]) => ({ doctor, monto, pct: facturacion ? monto/facturacion : 0 }))
-    .sort((a,b) => b.monto - a.monto);
-
-  return {
-    periodo: per, facturacion, atenciones, pacUnicos, ingAtencion, prodSillon,
-    totalPN, conRef, trazabilidad, meta, google, referidos, organico,
-    mix, casosOrto, casosImpl, clubOrto, clubOtros, clubTotal,
-    clubPctOtros: clubTotal ? clubOtros/clubTotal : null, doctores,
-  };
-}
-
-function calcularVentanas(per, acc, afiliados) {
-  const serFin = pSerial(per);
-  const en = (k, meses) => { const s = pSerial(k); return s <= serFin && s > serFin - meses; };
-  const acc12 = acc.filter(f => en(f[A_PER], 12));
-  const acc6  = acc.filter(f => en(f[A_PER], 6));
-
-  const rutsActivos = new Set(acc12.map(f => f[A_RUT]).filter(Boolean));
-  const setAfil = new Set(afiliados);
-  let sociosActivos = 0;
-  rutsActivos.forEach(r => { if (setAfil.has(r)) sociosActivos++; });
-
-  const tratPorRut = new Map();
-  for (const f of acc6) {
-    if (!f[A_RUT] || !f[A_TRA] || !setAfil.has(f[A_RUT])) continue;
-    if (!tratPorRut.has(f[A_RUT])) tratPorRut.set(f[A_RUT], new Set());
-    tratPorRut.get(f[A_RUT]).add(f[A_TRA]);
+  function mapPacientes(rows) {
+    const out = new Map();
+    let ignoradas = 0;
+    for (const r of rows) {
+      const per = pKey(r["Mes de afiliación"], r["Año de afiliación"]);
+      const pid = String(r["# Paciente"] ?? "").trim();
+      if (!per || !pid) {
+        ignoradas++;
+        continue;
+      }
+      const fila = {
+        periodo: per,
+        pid,
+        rut: normRut(r["RUT Paciente"]),
+        referencia: String(r["Referencia Paciente"] ?? "").trim().toUpperCase()
+      };
+      if (!out.has(per)) out.set(per, []);
+      out.get(per).push(fila);
+    }
+    return {
+      grupos: out,
+      ignoradas
+    };
   }
-  let retorno = 0, enProceso = 0;
-  afiliados.forEach(r => {
-    const n = tratPorRut.has(r) ? tratPorRut.get(r).size : 0;
-    if (n >= 2) retorno++; else if (n === 1) enProceso++;
-  });
-  const totalSocios = afiliados.length;
 
-  return {
-    pacientesActivos: rutsActivos.size, sociosActivos,
-    tasaAfiliacion: rutsActivos.size ? sociosActivos / rutsActivos.size : null,
-    totalSocios, retorno, enProceso, sinActividad: totalSocios - retorno - enProceso,
-    tasaRetorno: totalSocios ? retorno / totalSocios : null,
+  /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
+  const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || ""];
+  const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || ""];
+
+  /* ═══════════════════ CÁLCULO DE INDICADORES ═══════════════════ */
+  function construirIndices(acc, pn) {
+    const pidsNuevos = new Set(pn.map(r => r[P_PID]));
+    const primeraOrto = new Map();
+    const primeraImpl = new Map();
+    for (const f of acc) {
+      const per = f[A_PER];
+      if (f[A_CAT] === "ORTODONCIA" && pidsNuevos.has(f[A_PID])) {
+        const prev = primeraOrto.get(f[A_PID]);
+        if (!prev || per < prev) primeraOrto.set(f[A_PID], per);
+      }
+      if (f[A_CAT] === "IMPLANTOLOGÍA" && f[A_PZA] && PIEZA_RE.test(f[A_PZA]) && esImplanteValido(f[A_PRE])) {
+        const k = f[A_PID] + "|" + f[A_PZA];
+        const prev = primeraImpl.get(k);
+        if (!prev || per < prev) primeraImpl.set(k, per);
+      }
+    }
+    const pagoPorPid = new Map();
+    const pagoPorPidPer = new Map();
+    for (const f of acc) {
+      pagoPorPid.set(f[A_PID], (pagoPorPid.get(f[A_PID]) || 0) + f[A_PAG]);
+      const k = f[A_PID] + "|" + f[A_PER];
+      pagoPorPidPer.set(k, (pagoPorPidPer.get(k) || 0) + f[A_PAG]);
+    }
+    return {
+      primeraOrto,
+      primeraImpl,
+      pagoPorPid,
+      pagoPorPidPer,
+      pidsNuevos
+    };
+  }
+  function calcularPeriodo(per, acc, pn, inversion, idx) {
+    const accP = acc.filter(f => f[A_PER] === per);
+    const pnP = pn.filter(r => r[P_PER] === per);
+    const facturacion = accP.reduce((s, f) => s + f[A_PAG], 0);
+    const atenciones = new Set(accP.map(f => f[A_PID] + "|" + f[A_FEC])).size;
+    const pacUnicos = new Set(accP.map(f => f[A_PID])).size;
+    const ingAtencion = atenciones ? facturacion / atenciones : 0;
+    const prodSillon = facturacion / 3;
+    const totalPN = pnP.length;
+    const conRef = pnP.filter(r => r[P_REF] !== "").length;
+    const trazabilidad = totalPN ? conRef / totalPN : null;
+    const porCanal = {
+      META: [],
+      GOOGLE: [],
+      REFERIDOS: [],
+      ORGANICO: [],
+      OTRO: []
+    };
+    for (const r of pnP) {
+      const c = canalDe(r[P_REF]);
+      if (porCanal[c]) porCanal[c].push(r[P_PID]);
+    }
+    const inv = inversion[per] || {
+      meta: 0,
+      google: 0
+    };
+    const canalKpi = (pids, gasto) => {
+      const n = pids.length;
+      const ingMes = pids.reduce((s, p) => s + (idx.pagoPorPidPer.get(p + "|" + per) || 0), 0);
+      const ingAcum = pids.reduce((s, p) => s + (idx.pagoPorPid.get(p) || 0), 0);
+      return {
+        pacientes: n,
+        inversion: gasto || 0,
+        ingMes,
+        ingAcum,
+        cpa: n && gasto ? gasto / n : null,
+        roasMes: gasto ? ingMes / gasto : null,
+        roasAcum: gasto ? ingAcum / gasto : null
+      };
+    };
+    const meta = canalKpi(porCanal.META, inv.meta);
+    const google = canalKpi(porCanal.GOOGLE, inv.google);
+    const referidos = {
+      pacientes: porCanal.REFERIDOS.length,
+      ingMes: porCanal.REFERIDOS.reduce((s, p) => s + (idx.pagoPorPidPer.get(p + "|" + per) || 0), 0),
+      ingAcum: porCanal.REFERIDOS.reduce((s, p) => s + (idx.pagoPorPid.get(p) || 0), 0)
+    };
+    const organico = porCanal.ORGANICO.length;
+    const mixMap = new Map();
+    for (const f of accP) mixMap.set(f[A_CAT], (mixMap.get(f[A_CAT]) || 0) + f[A_PAG]);
+    const mix = CATEGORIAS.map(c => ({
+      categoria: c,
+      monto: mixMap.get(c) || 0
+    }));
+    const sumaListadas = mix.reduce((s, m) => s + m.monto, 0);
+    const otras = facturacion - sumaListadas;
+    if (Math.abs(otras) > 0.5) mix.push({
+      categoria: "OTRAS (no clasificadas)",
+      monto: otras
+    });
+    mix.forEach(m => {
+      m.pct = facturacion ? m.monto / facturacion : 0;
+    });
+    let casosOrto = 0;
+    idx.primeraOrto.forEach(p => {
+      if (p === per) casosOrto++;
+    });
+    let casosImpl = 0;
+    idx.primeraImpl.forEach(p => {
+      if (p === per) casosImpl++;
+    });
+    const accClub = accP.filter(f => f[A_CON] === "CLUB SONRISA CEO");
+    const clubOrto = accClub.filter(f => f[A_CAT] === "ORTODONCIA").reduce((s, f) => s + f[A_PAG], 0);
+    const clubTotal = accClub.reduce((s, f) => s + f[A_PAG], 0);
+    const clubOtros = clubTotal - clubOrto;
+    const docMap = new Map();
+    for (const f of accP) {
+      if (!f[A_DOC]) continue;
+      docMap.set(f[A_DOC], (docMap.get(f[A_DOC]) || 0) + f[A_PAG]);
+    }
+    const doctores = [...docMap.entries()].map(([doctor, monto]) => ({
+      doctor,
+      monto,
+      pct: facturacion ? monto / facturacion : 0
+    })).sort((a, b) => b.monto - a.monto);
+    return {
+      periodo: per,
+      facturacion,
+      atenciones,
+      pacUnicos,
+      ingAtencion,
+      prodSillon,
+      totalPN,
+      conRef,
+      trazabilidad,
+      meta,
+      google,
+      referidos,
+      organico,
+      mix,
+      casosOrto,
+      casosImpl,
+      clubOrto,
+      clubOtros,
+      clubTotal,
+      clubPctOtros: clubTotal ? clubOtros / clubTotal : null,
+      doctores
+    };
+  }
+  function calcularVentanas(per, acc, afiliados) {
+    const serFin = pSerial(per);
+    const en = (k, meses) => {
+      const s = pSerial(k);
+      return s <= serFin && s > serFin - meses;
+    };
+    const acc12 = acc.filter(f => en(f[A_PER], 12));
+    const acc6 = acc.filter(f => en(f[A_PER], 6));
+    const rutsActivos = new Set(acc12.map(f => f[A_RUT]).filter(Boolean));
+    const setAfil = new Set(afiliados);
+    let sociosActivos = 0;
+    rutsActivos.forEach(r => {
+      if (setAfil.has(r)) sociosActivos++;
+    });
+    const tratPorRut = new Map();
+    for (const f of acc6) {
+      if (!f[A_RUT] || !f[A_TRA] || !setAfil.has(f[A_RUT])) continue;
+      if (!tratPorRut.has(f[A_RUT])) tratPorRut.set(f[A_RUT], new Set());
+      tratPorRut.get(f[A_RUT]).add(f[A_TRA]);
+    }
+    let retorno = 0,
+      enProceso = 0;
+    afiliados.forEach(r => {
+      const n = tratPorRut.has(r) ? tratPorRut.get(r).size : 0;
+      if (n >= 2) retorno++;else if (n === 1) enProceso++;
+    });
+    const totalSocios = afiliados.length;
+    return {
+      pacientesActivos: rutsActivos.size,
+      sociosActivos,
+      tasaAfiliacion: rutsActivos.size ? sociosActivos / rutsActivos.size : null,
+      totalSocios,
+      retorno,
+      enProceso,
+      sinActividad: totalSocios - retorno - enProceso,
+      tasaRetorno: totalSocios ? retorno / totalSocios : null
+    };
+  }
+
+  /* ═══════════════════ COMPONENTES UI ═══════════════════ */
+  const Eyebrow = ({
+    children,
+    color = "var(--dim)"
+  }) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      letterSpacing: ".14em",
+      textTransform: "uppercase",
+      color,
+      fontWeight: 600,
+      marginBottom: 6
+    }
+  }, children);
+  const Panel = ({
+    children,
+    style
+  }) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "var(--surf)",
+      border: "1px solid var(--line)",
+      borderRadius: 10,
+      ...style
+    }
+  }, children);
+  const SecTitle = ({
+    children,
+    color,
+    right
+  }) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      gap: 16,
+      marginBottom: 14,
+      paddingBottom: 8,
+      flexWrap: "wrap",
+      borderBottom: "1px solid var(--line)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 3,
+      height: 20,
+      background: color,
+      borderRadius: 2
+    }
+  }), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 24,
+      lineHeight: 1
+    }
+  }, children)), right);
+  const Metric = ({
+    label,
+    value,
+    meta,
+    estado,
+    sub,
+    color = "var(--txt)"
+  }) => {
+    const c = estado === "ok" ? "var(--ok)" : estado === "bad" ? "var(--bad)" : estado === "warn" ? "var(--warn)" : "var(--dim)";
+    return /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px",
+        position: "relative",
+        overflow: "hidden"
+      }
+    }, estado && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 3,
+        background: c
+      }
+    }), /*#__PURE__*/React.createElement(Eyebrow, null, label), /*#__PURE__*/React.createElement("div", {
+      className: "disp",
+      style: {
+        fontSize: 34,
+        lineHeight: .95,
+        color,
+        marginTop: 2
+      }
+    }, value), meta && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: c,
+        marginTop: 5,
+        fontWeight: 500
+      }
+    }, meta), sub && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "var(--dim)",
+        marginTop: 3
+      }
+    }, sub));
   };
-}
-
-/* ═══════════════════ COMPONENTES UI ═══════════════════ */
-const Eyebrow = ({ children, color = "var(--dim)" }) => (
-  <div style={{ fontSize: 10, letterSpacing: ".14em", textTransform: "uppercase",
-                color, fontWeight: 600, marginBottom: 6 }}>{children}</div>
-);
-const Panel = ({ children, style }) => (
-  <div style={{ background: "var(--surf)", border: "1px solid var(--line)",
-                borderRadius: 10, ...style }}>{children}</div>
-);
-const SecTitle = ({ children, color, right }) => (
-  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between",
-                gap: 16, marginBottom: 14, paddingBottom: 8, flexWrap: "wrap",
-                borderBottom: "1px solid var(--line)" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <span style={{ width: 3, height: 20, background: color, borderRadius: 2 }} />
-      <h2 style={{ fontSize: 24, lineHeight: 1 }}>{children}</h2>
-    </div>
-    {right}
-  </div>
-);
-const Metric = ({ label, value, meta, estado, sub, color = "var(--txt)" }) => {
-  const c = estado === "ok" ? "var(--ok)" : estado === "bad" ? "var(--bad)"
-          : estado === "warn" ? "var(--warn)" : "var(--dim)";
-  return (
-    <Panel style={{ padding: "14px 16px", position: "relative", overflow: "hidden" }}>
-      {estado && <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />}
-      <Eyebrow>{label}</Eyebrow>
-      <div className="disp" style={{ fontSize: 34, lineHeight: .95, color, marginTop: 2 }}>{value}</div>
-      {meta && <div style={{ fontSize: 11, color: c, marginTop: 5, fontWeight: 500 }}>{meta}</div>}
-      {sub && <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>{sub}</div>}
-    </Panel>
-  );
-};
-const Row = ({ label, value, meta, estado, hint }) => {
-  const c = estado === "ok" ? "var(--ok)" : estado === "bad" ? "var(--bad)"
-          : estado === "warn" ? "var(--warn)" : "var(--dim)";
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto",
-                  gap: 14, alignItems: "baseline", padding: "9px 0",
-                  borderBottom: "1px solid #202024" }}>
-      <div>
-        <div style={{ fontSize: 13, color: "var(--bone)" }}>{label}</div>
-        {hint && <div style={{ fontSize: 10.5, color: "#6E6E76", marginTop: 2 }}>{hint}</div>}
-      </div>
-      <div className="mono" style={{ fontSize: 15, fontWeight: 500, whiteSpace: "nowrap" }}>{value}</div>
-      <div style={{ fontSize: 10.5, color: c, minWidth: 70, textAlign: "right",
-                    whiteSpace: "nowrap", fontWeight: 500 }}>{meta}</div>
-    </div>
-  );
-};
-const Vacio = ({ titulo, texto, accion }) => (
-  <Panel style={{ padding: "44px 28px", textAlign: "center" }}>
-    <div className="disp" style={{ fontSize: 26, color: "var(--bone)" }}>{titulo}</div>
-    <div style={{ fontSize: 13, color: "var(--dim)", marginTop: 8, maxWidth: 460,
-                  marginInline: "auto", lineHeight: 1.55 }}>{texto}</div>
-    {accion && <div style={{ marginTop: 18 }}>{accion}</div>}
-  </Panel>
-);
-const Boton = ({ children, onClick, tono = "base", disabled, chico }) => {
-  const t = { base:  { bg: "var(--surf2)", bd: "var(--line)", fg: "var(--txt)" },
-              claro: { bg: "var(--bone)",  bd: "var(--bone)", fg: "#0B0B0C" },
-              peli:  { bg: "transparent",  bd: "#4A2A32",     fg: "var(--bad)" } }[tono];
-  return (
-    <button onClick={onClick} disabled={disabled}
-      style={{ background: t.bg, border: `1px solid ${t.bd}`, color: t.fg,
-               borderRadius: 7, padding: chico ? "6px 11px" : "9px 16px",
-               fontSize: chico ? 12 : 13, fontWeight: 500,
-               opacity: disabled ? .4 : 1, whiteSpace: "nowrap" }}>
-      {children}
-    </button>
-  );
-};
-const MapaPeriodos = ({ periodosAcc, periodosPn, sel, onSel }) => {
-  const setA = new Set(periodosAcc), setP = new Set(periodosPn);
-  const todos = [...new Set([...periodosAcc, ...periodosPn])].sort();
-  if (!todos.length) return (
-    <div style={{ fontSize: 12, color: "var(--dim)", padding: "10px 0" }}>Sin períodos cargados todavía.</div>
-  );
-  const anios = [...new Set(todos.map(k => k.split("-")[0]))].sort();
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {anios.map(a => (
-        <div key={a}>
-          <div className="mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>{a}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr)", gap: 3 }}>
-            {MES_ABR.map((m, i) => {
-              const k = `${a}-${String(i+1).padStart(2,"0")}`;
-              const hayA = setA.has(k), hayP = setP.has(k);
-              const activo = hayA || hayP;
-              const esSel = k === sel;
-              return (
-                <button key={k} onClick={() => activo && onSel(k)} disabled={!activo}
-                  title={activo ? pLargo(k) : `${pLargo(k)} — sin datos`}
-                  style={{ aspectRatio: "1", borderRadius: 4,
-                    border: esSel ? "1.5px solid var(--bone)" : "1px solid var(--line)",
-                    background: !activo ? "transparent" : (hayA && hayP) ? "#2E4A3A" : "#2A2F3E",
-                    color: activo ? "var(--txt)" : "#3A3A40",
-                    fontSize: 9, fontFamily: "'IBM Plex Mono',monospace",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: activo ? "pointer" : "default", padding: 0 }}>
-                  {m[0]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-      <div style={{ display: "flex", gap: 14, fontSize: 10, color: "var(--dim)", marginTop: 2, flexWrap: "wrap" }}>
-        <span><i style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#2E4A3A", marginRight:5 }} />Completo</span>
-        <span><i style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#2A2F3E", marginRight:5 }} />Parcial</span>
-        <span><i style={{ display:"inline-block", width:8, height:8, borderRadius:2, border:"1px solid var(--line)", marginRight:5 }} />Sin datos</span>
-      </div>
-    </div>
-  );
-};
-
-/* ═══════════════════ PANTALLA DE LOGIN ═══════════════════ */
-function Login({ onLogin }) {
-  const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
-  const [error, setError] = useState("");
-  const [cargando, setCargando] = useState(false);
-
-  const entrar = async (e) => {
-    e.preventDefault();
-    setCargando(true); setError("");
-    const { data, error: err } = await sb.auth.signInWithPassword({ email, password: pass });
-    setCargando(false);
-    if (err) { setError("Correo o contraseña incorrectos."); return; }
-    onLogin(data.session);
+  const Row = ({
+    label,
+    value,
+    meta,
+    estado,
+    hint
+  }) => {
+    const c = estado === "ok" ? "var(--ok)" : estado === "bad" ? "var(--bad)" : estado === "warn" ? "var(--warn)" : "var(--dim)";
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr auto auto",
+        gap: 14,
+        alignItems: "baseline",
+        padding: "9px 0",
+        borderBottom: "1px solid #202024"
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: "var(--bone)"
+      }
+    }, label), hint && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10.5,
+        color: "#6E6E76",
+        marginTop: 2
+      }
+    }, hint)), /*#__PURE__*/React.createElement("div", {
+      className: "mono",
+      style: {
+        fontSize: 15,
+        fontWeight: 500,
+        whiteSpace: "nowrap"
+      }
+    }, value), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10.5,
+        color: c,
+        minWidth: 70,
+        textAlign: "right",
+        whiteSpace: "nowrap",
+        fontWeight: 500
+      }
+    }, meta));
+  };
+  const Vacio = ({
+    titulo,
+    texto,
+    accion
+  }) => /*#__PURE__*/React.createElement(Panel, {
+    style: {
+      padding: "44px 28px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "disp",
+    style: {
+      fontSize: 26,
+      color: "var(--bone)"
+    }
+  }, titulo), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--dim)",
+      marginTop: 8,
+      maxWidth: 460,
+      marginInline: "auto",
+      lineHeight: 1.55
+    }
+  }, texto), accion && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 18
+    }
+  }, accion));
+  const Boton = ({
+    children,
+    onClick,
+    tono = "base",
+    disabled,
+    chico
+  }) => {
+    const t = {
+      base: {
+        bg: "var(--surf2)",
+        bd: "var(--line)",
+        fg: "var(--txt)"
+      },
+      claro: {
+        bg: "var(--bone)",
+        bd: "var(--bone)",
+        fg: "#0B0B0C"
+      },
+      peli: {
+        bg: "transparent",
+        bd: "#4A2A32",
+        fg: "var(--bad)"
+      }
+    }[tono];
+    return /*#__PURE__*/React.createElement("button", {
+      onClick: onClick,
+      disabled: disabled,
+      style: {
+        background: t.bg,
+        border: `1px solid ${t.bd}`,
+        color: t.fg,
+        borderRadius: 7,
+        padding: chico ? "6px 11px" : "9px 16px",
+        fontSize: chico ? 12 : 13,
+        fontWeight: 500,
+        opacity: disabled ? .4 : 1,
+        whiteSpace: "nowrap"
+      }
+    }, children);
+  };
+  const MapaPeriodos = ({
+    periodosAcc,
+    periodosPn,
+    sel,
+    onSel
+  }) => {
+    const setA = new Set(periodosAcc),
+      setP = new Set(periodosPn);
+    const todos = [...new Set([...periodosAcc, ...periodosPn])].sort();
+    if (!todos.length) return /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "var(--dim)",
+        padding: "10px 0"
+      }
+    }, "Sin per\xEDodos cargados todav\xEDa.");
+    const anios = [...new Set(todos.map(k => k.split("-")[0]))].sort();
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 10
+      }
+    }, anios.map(a => /*#__PURE__*/React.createElement("div", {
+      key: a
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "mono",
+      style: {
+        fontSize: 10,
+        color: "var(--dim)",
+        marginBottom: 5
+      }
+    }, a), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(12,1fr)",
+        gap: 3
+      }
+    }, MES_ABR.map((m, i) => {
+      const k = `${a}-${String(i + 1).padStart(2, "0")}`;
+      const hayA = setA.has(k),
+        hayP = setP.has(k);
+      const activo = hayA || hayP;
+      const esSel = k === sel;
+      return /*#__PURE__*/React.createElement("button", {
+        key: k,
+        onClick: () => activo && onSel(k),
+        disabled: !activo,
+        title: activo ? pLargo(k) : `${pLargo(k)} — sin datos`,
+        style: {
+          aspectRatio: "1",
+          borderRadius: 4,
+          border: esSel ? "1.5px solid var(--bone)" : "1px solid var(--line)",
+          background: !activo ? "transparent" : hayA && hayP ? "#2E4A3A" : "#2A2F3E",
+          color: activo ? "var(--txt)" : "#3A3A40",
+          fontSize: 9,
+          fontFamily: "'IBM Plex Mono',monospace",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: activo ? "pointer" : "default",
+          padding: 0
+        }
+      }, m[0]);
+    })))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 14,
+        fontSize: 10,
+        color: "var(--dim)",
+        marginTop: 2,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("i", {
+      style: {
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        background: "#2E4A3A",
+        marginRight: 5
+      }
+    }), "Completo"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("i", {
+      style: {
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        background: "#2A2F3E",
+        marginRight: 5
+      }
+    }), "Parcial"), /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("i", {
+      style: {
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        border: "1px solid var(--line)",
+        marginRight: 5
+      }
+    }), "Sin datos")));
   };
 
-  return (
-    <div className="cmi" style={{ display:"grid", placeItems:"center", minHeight:"100vh", padding:20 }}>
-      <Panel style={{ padding:"32px 28px", width:"100%", maxWidth:360 }}>
-        <div style={{ textAlign:"center", marginBottom:24 }}>
-          <div style={{ width:44, height:44, borderRadius:10, background:"var(--bone)",
-                        display:"grid", placeItems:"center", margin:"0 auto 14px" }}>
-            <span className="disp" style={{ fontSize:24, color:"#0B0B0C" }}>C</span>
-          </div>
-          <h1 style={{ fontSize:24 }}>CEO CLÍNICA DENTAL</h1>
-          <div style={{ fontSize:11, color:"var(--dim)", marginTop:4 }}>Panel comercial · Acceso privado</div>
-        </div>
-        <form onSubmit={entrar} style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          <div>
-            <label style={{ fontSize:10, letterSpacing:".1em", textTransform:"uppercase",
-                            color:"var(--dim)", display:"block", marginBottom:5 }}>Correo</label>
-            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required />
-          </div>
-          <div>
-            <label style={{ fontSize:10, letterSpacing:".1em", textTransform:"uppercase",
-                            color:"var(--dim)", display:"block", marginBottom:5 }}>Contraseña</label>
-            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} required />
-          </div>
-          {error && <div style={{ fontSize:12, color:"var(--bad)" }}>{error}</div>}
-          <button type="submit" disabled={cargando}
-            style={{ background:"var(--bone)", color:"#0B0B0C", borderRadius:7, padding:"11px 16px",
-                     fontSize:14, fontWeight:600, marginTop:6, opacity: cargando?0.6:1 }}>
-            {cargando ? "Entrando…" : "Entrar"}
-          </button>
-        </form>
-      </Panel>
-    </div>
-  );
-}
+  /* ═══════════════════ PANTALLA DE LOGIN ═══════════════════ */
+  function Login({
+    onLogin
+  }) {
+    const [email, setEmail] = useState("");
+    const [pass, setPass] = useState("");
+    const [error, setError] = useState("");
+    const [cargando, setCargando] = useState(false);
+    const entrar = async e => {
+      e.preventDefault();
+      setCargando(true);
+      setError("");
+      const {
+        data,
+        error: err
+      } = await sb.auth.signInWithPassword({
+        email,
+        password: pass
+      });
+      setCargando(false);
+      if (err) {
+        setError("Correo o contraseña incorrectos.");
+        return;
+      }
+      onLogin(data.session);
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      className: "cmi",
+      style: {
+        display: "grid",
+        placeItems: "center",
+        minHeight: "100vh",
+        padding: 20
+      }
+    }, /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "32px 28px",
+        width: "100%",
+        maxWidth: 360
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        marginBottom: 24
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+        background: "var(--bone)",
+        display: "grid",
+        placeItems: "center",
+        margin: "0 auto 14px"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "disp",
+      style: {
+        fontSize: 24,
+        color: "#0B0B0C"
+      }
+    }, "C")), /*#__PURE__*/React.createElement("h1", {
+      style: {
+        fontSize: 24
+      }
+    }, "CEO CL\xCDNICA DENTAL"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "var(--dim)",
+        marginTop: 4
+      }
+    }, "Panel comercial \xB7 Acceso privado")), /*#__PURE__*/React.createElement("form", {
+      onSubmit: entrar,
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10,
+        letterSpacing: ".1em",
+        textTransform: "uppercase",
+        color: "var(--dim)",
+        display: "block",
+        marginBottom: 5
+      }
+    }, "Correo"), /*#__PURE__*/React.createElement("input", {
+      type: "email",
+      value: email,
+      onChange: e => setEmail(e.target.value),
+      required: true
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10,
+        letterSpacing: ".1em",
+        textTransform: "uppercase",
+        color: "var(--dim)",
+        display: "block",
+        marginBottom: 5
+      }
+    }, "Contrase\xF1a"), /*#__PURE__*/React.createElement("input", {
+      type: "password",
+      value: pass,
+      onChange: e => setPass(e.target.value),
+      required: true
+    })), error && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "var(--bad)"
+      }
+    }, error), /*#__PURE__*/React.createElement("button", {
+      type: "submit",
+      disabled: cargando,
+      style: {
+        background: "var(--bone)",
+        color: "#0B0B0C",
+        borderRadius: 7,
+        padding: "11px 16px",
+        fontSize: 14,
+        fontWeight: 600,
+        marginTop: 6,
+        opacity: cargando ? 0.6 : 1
+      }
+    }, cargando ? "Entrando…" : "Entrar"))));
+  }
 
-/* ═══════════════════ APP PRINCIPAL ═══════════════════ */
-function PanelCMI({ session, onLogout }) {
-  const [listo, setListo] = useState(false);
-  const [acc, setAcc] = useState([]);
-  const [pn, setPn] = useState([]);
-  const [afiliados, setAfiliados] = useState([]);
-  const [inversion, setInversion] = useState({});
-  const [periodo, setPeriodo] = useState(null);
-  const [tab, setTab] = useState("resumen");
-  const [aviso, setAviso] = useState(null);
-  const [cargando, setCargando] = useState(false);
+  /* ═══════════════════ APP PRINCIPAL ═══════════════════ */
+  function PanelCMI({
+    session,
+    onLogout
+  }) {
+    const [listo, setListo] = useState(false);
+    const [acc, setAcc] = useState([]);
+    const [pn, setPn] = useState([]);
+    const [afiliados, setAfiliados] = useState([]);
+    const [inversion, setInversion] = useState({});
+    const [periodo, setPeriodo] = useState(null);
+    const [tab, setTab] = useState("resumen");
+    const [aviso, setAviso] = useState(null);
+    const [cargando, setCargando] = useState(false);
+    const refAcc = useRef(null),
+      refPn = useRef(null),
+      refAf = useRef(null);
+    const notificar = (tipo, texto) => {
+      setAviso({
+        tipo,
+        texto
+      });
+      setTimeout(() => setAviso(null), 7000);
+    };
+    const cargarTodo = async () => {
+      const [{
+        data: da
+      }, {
+        data: dp
+      }, {
+        data: df
+      }, {
+        data: di
+      }] = await Promise.all([sb.from("cmi_acciones").select("*"), sb.from("cmi_pacientes_nuevos").select("*"), sb.from("cmi_afiliados").select("rut"), sb.from("cmi_inversion").select("*")]);
+      setAcc((da || []).map(accToArr));
+      setPn((dp || []).map(pnToArr));
+      setAfiliados((df || []).map(r => r.rut));
+      const invObj = {};
+      (di || []).forEach(r => {
+        invObj[r.periodo] = {
+          meta: Number(r.meta) || 0,
+          google: Number(r.google) || 0
+        };
+      });
+      setInversion(invObj);
+      const disp = [...new Set([...(da || []).map(r => r.periodo), ...(dp || []).map(r => r.periodo)])].sort();
+      setPeriodo(prev => prev && disp.includes(prev) ? prev : disp.length ? disp[disp.length - 1] : null);
+    };
+    useEffect(() => {
+      (async () => {
+        await cargarTodo();
+        setListo(true);
+      })();
+    }, []);
+    const periodosAcc = useMemo(() => [...new Set(acc.map(f => f[A_PER]))].sort(), [acc]);
+    const periodosPn = useMemo(() => [...new Set(pn.map(r => r[P_PER]))].sort(), [pn]);
+    const periodos = useMemo(() => [...new Set([...periodosAcc, ...periodosPn])].sort(), [periodosAcc, periodosPn]);
+    const idx = useMemo(() => construirIndices(acc, pn), [acc, pn]);
+    const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx) : null, [periodo, acc, pn, inversion, idx]);
+    const V = useMemo(() => periodo ? calcularVentanas(periodo, acc, afiliados) : null, [periodo, acc, afiliados]);
+    const serie = useMemo(() => periodos.map(p => {
+      const k = calcularPeriodo(p, acc, pn, inversion, idx);
+      return {
+        periodo: p,
+        label: pLabel(p),
+        facturacion: k.facturacion,
+        atenciones: k.atenciones,
+        ingAtencion: Math.round(k.ingAtencion),
+        casosOrto: k.casosOrto,
+        casosImpl: k.casosImpl,
+        club: k.clubTotal,
+        referidos: k.referidos.pacientes
+      };
+    }), [periodos, acc, pn, inversion, idx]);
 
-  const refAcc = useRef(null), refPn = useRef(null), refAf = useRef(null);
-
-  const notificar = (tipo, texto) => { setAviso({ tipo, texto }); setTimeout(() => setAviso(null), 7000); };
-
-  const cargarTodo = async () => {
-    const [{data:da}, {data:dp}, {data:df}, {data:di}] = await Promise.all([
-      sb.from("cmi_acciones").select("*"),
-      sb.from("cmi_pacientes_nuevos").select("*"),
-      sb.from("cmi_afiliados").select("rut"),
-      sb.from("cmi_inversion").select("*"),
-    ]);
-    setAcc((da||[]).map(accToArr));
-    setPn((dp||[]).map(pnToArr));
-    setAfiliados((df||[]).map(r=>r.rut));
-    const invObj = {};
-    (di||[]).forEach(r => { invObj[r.periodo] = { meta: Number(r.meta)||0, google: Number(r.google)||0 }; });
-    setInversion(invObj);
-    const disp = [...new Set([...(da||[]).map(r=>r.periodo), ...(dp||[]).map(r=>r.periodo)])].sort();
-    setPeriodo(prev => prev && disp.includes(prev) ? prev : (disp.length ? disp[disp.length-1] : null));
-  };
-
-  useEffect(() => { (async () => { await cargarTodo(); setListo(true); })(); }, []);
-
-  const periodosAcc = useMemo(() => [...new Set(acc.map(f => f[A_PER]))].sort(), [acc]);
-  const periodosPn  = useMemo(() => [...new Set(pn.map(r => r[P_PER]))].sort(), [pn]);
-  const periodos    = useMemo(() => [...new Set([...periodosAcc, ...periodosPn])].sort(), [periodosAcc, periodosPn]);
-
-  const idx = useMemo(() => construirIndices(acc, pn), [acc, pn]);
-  const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx) : null,
-                    [periodo, acc, pn, inversion, idx]);
-  const V = useMemo(() => periodo ? calcularVentanas(periodo, acc, afiliados) : null,
-                    [periodo, acc, afiliados]);
-
-  const serie = useMemo(() => periodos.map(p => {
-    const k = calcularPeriodo(p, acc, pn, inversion, idx);
-    return { periodo: p, label: pLabel(p), facturacion: k.facturacion,
-             atenciones: k.atenciones, ingAtencion: Math.round(k.ingAtencion),
-             casosOrto: k.casosOrto, casosImpl: k.casosImpl,
-             club: k.clubTotal, referidos: k.referidos.pacientes };
-  }), [periodos, acc, pn, inversion, idx]);
-
-  /* — Subir Acciones Realizadas — */
-  const subirAcciones = (file) => {
-    setCargando(true);
-    Papa.parse(file, {
-      header: true, skipEmptyLines: true, encoding: "UTF-8",
-      complete: async (res) => {
-        try {
-          const cols = res.meta.fields || [];
-          if (!cols.includes("# Paciente") || !cols.includes("Mes de realización")) {
-            notificar("error", "Ese archivo no es de Acciones Realizadas: faltan columnas clave.");
-            setCargando(false); return;
-          }
-          const { grupos, ignoradas } = mapAcciones(res.data);
-          if (!grupos.size) { notificar("error", "No se encontraron filas con período válido."); setCargando(false); return; }
-          const periodosSubidos = [...grupos.keys()];
-          // Reemplazar por período: borrar y luego insertar
-          for (const per of periodosSubidos) {
-            await sb.from("cmi_acciones").delete().eq("periodo", per);
-          }
-          for (const per of periodosSubidos) {
-            const filas = grupos.get(per);
-            for (let i = 0; i < filas.length; i += 500) {
-              await sb.from("cmi_acciones").insert(filas.slice(i, i+500));
+    /* — Subir Acciones Realizadas — */
+    const subirAcciones = file => {
+      setCargando(true);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8",
+        complete: async res => {
+          try {
+            const cols = res.meta.fields || [];
+            if (!cols.includes("# Paciente") || !cols.includes("Mes de realización")) {
+              notificar("error", "Ese archivo no es de Acciones Realizadas: faltan columnas clave.");
+              setCargando(false);
+              return;
             }
-          }
-          await cargarTodo();
-          const pers = periodosSubidos.sort();
-          if (!periodo || pers[pers.length-1] > periodo) setPeriodo(pers[pers.length-1]);
-          notificar("ok", `Acciones cargadas: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}`);
-        } catch (e) { notificar("error", "No se pudo guardar: " + e.message); }
-        setCargando(false);
-      },
-      error: () => { notificar("error", "No se pudo leer el archivo."); setCargando(false); }
-    });
-  };
-
-  /* — Subir Pacientes Nuevos — */
-  const subirPacientes = (file) => {
-    setCargando(true);
-    Papa.parse(file, {
-      header: true, skipEmptyLines: true, encoding: "UTF-8",
-      complete: async (res) => {
-        try {
-          const cols = res.meta.fields || [];
-          if (!cols.includes("# Paciente") || !cols.includes("Mes de afiliación")) {
-            notificar("error", "Ese archivo no es de Pacientes Nuevos: faltan columnas clave.");
-            setCargando(false); return;
-          }
-          const { grupos, ignoradas } = mapPacientes(res.data);
-          if (!grupos.size) { notificar("error", "No se encontraron filas con período válido."); setCargando(false); return; }
-          const periodosSubidos = [...grupos.keys()];
-          for (const per of periodosSubidos) {
-            await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
-          }
-          for (const per of periodosSubidos) {
-            const filas = grupos.get(per);
-            for (let i = 0; i < filas.length; i += 500) {
-              await sb.from("cmi_pacientes_nuevos").insert(filas.slice(i, i+500));
+            const {
+              grupos,
+              ignoradas
+            } = mapAcciones(res.data);
+            if (!grupos.size) {
+              notificar("error", "No se encontraron filas con período válido.");
+              setCargando(false);
+              return;
             }
+            const periodosSubidos = [...grupos.keys()];
+            // Reemplazar por período: borrar y luego insertar
+            for (const per of periodosSubidos) {
+              await sb.from("cmi_acciones").delete().eq("periodo", per);
+            }
+            for (const per of periodosSubidos) {
+              const filas = grupos.get(per);
+              for (let i = 0; i < filas.length; i += 500) {
+                await sb.from("cmi_acciones").insert(filas.slice(i, i + 500));
+              }
+            }
+            await cargarTodo();
+            const pers = periodosSubidos.sort();
+            if (!periodo || pers[pers.length - 1] > periodo) setPeriodo(pers[pers.length - 1]);
+            notificar("ok", `Acciones cargadas: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}`);
+          } catch (e) {
+            notificar("error", "No se pudo guardar: " + e.message);
           }
-          await cargarTodo();
-          const pers = periodosSubidos.sort();
-          notificar("ok", `Pacientes nuevos cargados: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas omitidas.` : ""}`);
-        } catch (e) { notificar("error", "No se pudo guardar: " + e.message); }
-        setCargando(false);
-      },
-      error: () => { notificar("error", "No se pudo leer el archivo."); setCargando(false); }
-    });
-  };
+          setCargando(false);
+        },
+        error: () => {
+          notificar("error", "No se pudo leer el archivo.");
+          setCargando(false);
+        }
+      });
+    };
 
-  /* — Subir Afiliados (sobrescribe) — */
-  const subirAfiliados = (file) => {
-    setCargando(true);
-    Papa.parse(file, {
-      header: true, skipEmptyLines: true, encoding: "UTF-8",
-      complete: async (res) => {
-        try {
-          const cols = res.meta.fields || [];
-          const colRut = cols.find(c => String(c).trim().toUpperCase() === "RUT");
-          if (!colRut) { notificar("error", "Ese archivo no tiene una columna RUT."); setCargando(false); return; }
-          const ruts = [...new Set(res.data.map(r => normRut(r[colRut])).filter(Boolean))];
-          await sb.from("cmi_afiliados").delete().neq("rut", "___nada___");
-          for (let i = 0; i < ruts.length; i += 500) {
-            await sb.from("cmi_afiliados").insert(ruts.slice(i, i+500).map(rut => ({ rut })));
+    /* — Subir Pacientes Nuevos — */
+    const subirPacientes = file => {
+      setCargando(true);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8",
+        complete: async res => {
+          try {
+            const cols = res.meta.fields || [];
+            if (!cols.includes("# Paciente") || !cols.includes("Mes de afiliación")) {
+              notificar("error", "Ese archivo no es de Pacientes Nuevos: faltan columnas clave.");
+              setCargando(false);
+              return;
+            }
+            const {
+              grupos,
+              ignoradas
+            } = mapPacientes(res.data);
+            if (!grupos.size) {
+              notificar("error", "No se encontraron filas con período válido.");
+              setCargando(false);
+              return;
+            }
+            const periodosSubidos = [...grupos.keys()];
+            for (const per of periodosSubidos) {
+              await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
+            }
+            for (const per of periodosSubidos) {
+              const filas = grupos.get(per);
+              for (let i = 0; i < filas.length; i += 500) {
+                await sb.from("cmi_pacientes_nuevos").insert(filas.slice(i, i + 500));
+              }
+            }
+            await cargarTodo();
+            const pers = periodosSubidos.sort();
+            notificar("ok", `Pacientes nuevos cargados: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas omitidas.` : ""}`);
+          } catch (e) {
+            notificar("error", "No se pudo guardar: " + e.message);
           }
-          await cargarTodo();
-          notificar("ok", `Afiliados actualizados: ${ruts.length} socios. El listado anterior fue reemplazado.`);
-        } catch (e) { notificar("error", "No se pudo guardar: " + e.message); }
-        setCargando(false);
+          setCargando(false);
+        },
+        error: () => {
+          notificar("error", "No se pudo leer el archivo.");
+          setCargando(false);
+        }
+      });
+    };
+
+    /* — Subir Afiliados (sobrescribe) — */
+    const subirAfiliados = file => {
+      setCargando(true);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8",
+        complete: async res => {
+          try {
+            const cols = res.meta.fields || [];
+            const colRut = cols.find(c => String(c).trim().toUpperCase() === "RUT");
+            if (!colRut) {
+              notificar("error", "Ese archivo no tiene una columna RUT.");
+              setCargando(false);
+              return;
+            }
+            const ruts = [...new Set(res.data.map(r => normRut(r[colRut])).filter(Boolean))];
+            await sb.from("cmi_afiliados").delete().neq("rut", "___nada___");
+            for (let i = 0; i < ruts.length; i += 500) {
+              await sb.from("cmi_afiliados").insert(ruts.slice(i, i + 500).map(rut => ({
+                rut
+              })));
+            }
+            await cargarTodo();
+            notificar("ok", `Afiliados actualizados: ${ruts.length} socios. El listado anterior fue reemplazado.`);
+          } catch (e) {
+            notificar("error", "No se pudo guardar: " + e.message);
+          }
+          setCargando(false);
+        },
+        error: () => {
+          notificar("error", "No se pudo leer el archivo.");
+          setCargando(false);
+        }
+      });
+    };
+    const borrarPeriodo = async per => {
+      await sb.from("cmi_acciones").delete().eq("periodo", per);
+      await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
+      await cargarTodo();
+      notificar("ok", `${pLargo(per)} eliminado.`);
+    };
+    const guardarInversion = async (per, campo, valor) => {
+      const actual = inversion[per] || {
+        meta: 0,
+        google: 0
+      };
+      const nuevaFila = {
+        ...actual,
+        [campo]: toNum(valor)
+      };
+      const nueva = {
+        ...inversion,
+        [per]: nuevaFila
+      };
+      setInversion(nueva);
+      await sb.from("cmi_inversion").upsert({
+        periodo: per,
+        meta: nuevaFila.meta,
+        google: nuevaFila.google
+      });
+    };
+    if (!listo) return /*#__PURE__*/React.createElement("div", {
+      className: "cmi",
+      style: {
+        display: "grid",
+        placeItems: "center",
+        minHeight: "100vh"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "disp",
+      style: {
+        fontSize: 22,
+        color: "var(--dim)"
+      }
+    }, "Cargando datos\u2026"));
+    const hayDatos = periodos.length > 0;
+    const TABS = [{
+      id: "resumen",
+      n: "Resumen",
+      c: "var(--op)"
+    }, {
+      id: "publicidad",
+      n: "Publicidad",
+      c: "var(--meta)"
+    }, {
+      id: "mix",
+      n: "Mix de servicios",
+      c: "var(--mix)"
+    }, {
+      id: "programas",
+      n: "Programas",
+      c: "var(--club)"
+    }, {
+      id: "datos",
+      n: "Datos",
+      c: "var(--bone)"
+    }];
+    const est = (v, m) => v === null || v === undefined || !Number.isFinite(v) ? null : v >= m ? "ok" : "bad";
+    const tt = {
+      background: "#1C1C1F",
+      border: "1px solid #2A2A2F",
+      borderRadius: 8,
+      fontSize: 12
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      className: "cmi"
+    }, /*#__PURE__*/React.createElement("header", {
+      style: {
+        borderBottom: "1px solid var(--line)",
+        background: "#0E0E10",
+        position: "sticky",
+        top: 0,
+        zIndex: 20
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxWidth: 1320,
+        margin: "0 auto",
+        padding: "16px 22px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 20,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 34,
+        height: 34,
+        borderRadius: 8,
+        background: "var(--bone)",
+        display: "grid",
+        placeItems: "center",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "disp",
+      style: {
+        fontSize: 19,
+        color: "#0B0B0C"
+      }
+    }, "C")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
+      style: {
+        fontSize: 23,
+        lineHeight: 1
+      }
+    }, "CEO CL\xCDNICA DENTAL"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "var(--dim)",
+        letterSpacing: ".05em",
+        marginTop: 2
+      }
+    }, "Cuadro de mando comercial \xB7 Santiago"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 14
+      }
+    }, hayDatos && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        color: "var(--dim)"
+      }
+    }, "Per\xEDodo"), /*#__PURE__*/React.createElement("select", {
+      value: periodo || "",
+      onChange: e => setPeriodo(e.target.value),
+      style: {
+        width: "auto",
+        minWidth: 148,
+        fontFamily: "'Bebas Neue',sans-serif",
+        fontSize: 17,
+        letterSpacing: ".04em",
+        padding: "5px 10px"
+      }
+    }, [...periodos].reverse().map(p => /*#__PURE__*/React.createElement("option", {
+      key: p,
+      value: p
+    }, pLargo(p).toUpperCase())))), /*#__PURE__*/React.createElement(Boton, {
+      chico: true,
+      onClick: onLogout
+    }, "Salir"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxWidth: 1320,
+        margin: "0 auto",
+        padding: "0 22px",
+        display: "flex",
+        gap: 2,
+        overflowX: "auto"
+      }
+    }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => setTab(t.id),
+      style: {
+        padding: "9px 15px 10px",
+        fontSize: 12.5,
+        fontWeight: 500,
+        color: tab === t.id ? "var(--txt)" : "var(--dim)",
+        borderBottom: tab === t.id ? `2px solid ${t.c}` : "2px solid transparent",
+        whiteSpace: "nowrap"
+      }
+    }, t.n)))), aviso && /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxWidth: 1320,
+        margin: "12px auto 0",
+        padding: "0 22px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "11px 15px",
+        borderRadius: 8,
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        background: aviso.tipo === "ok" ? "#152B1E" : "#2E1519",
+        border: `1px solid ${aviso.tipo === "ok" ? "#2C5741" : "#5A2A33"}`,
+        color: aviso.tipo === "ok" ? "var(--ok)" : "var(--bad)"
+      }
+    }, aviso.texto)), /*#__PURE__*/React.createElement("main", {
+      style: {
+        maxWidth: 1320,
+        margin: "0 auto",
+        padding: "22px 22px 70px"
+      }
+    }, !hayDatos && tab !== "datos" && /*#__PURE__*/React.createElement(Vacio, {
+      titulo: "A\xDAN NO HAY DATOS",
+      texto: "Carga el hist\xF3rico de acciones realizadas, los pacientes nuevos y el listado de afiliados para empezar a ver los indicadores.",
+      accion: /*#__PURE__*/React.createElement(Boton, {
+        tono: "claro",
+        onClick: () => setTab("datos")
+      }, "Ir a cargar archivos")
+    }), tab === "resumen" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--op)",
+      right: /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "var(--dim)"
+        }
+      }, pLargo(periodo))
+    }, "OPERACI\xD3N DEL MES"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Facturaci\xF3n",
+      value: clpK(K.facturacion),
+      sub: clp(K.facturacion)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Atenciones totales",
+      value: ent(K.atenciones),
+      meta: `Meta ${METAS.atenciones}`,
+      estado: est(K.atenciones, METAS.atenciones)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Pacientes \xFAnicos",
+      value: ent(K.pacUnicos),
+      meta: `Meta ${METAS.pacientesUnicos}`,
+      estado: est(K.pacUnicos, METAS.pacientesUnicos)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ingreso por atenci\xF3n",
+      value: clp(K.ingAtencion),
+      meta: `Meta ${clpK(METAS.ingresoAtencion)}`,
+      estado: est(K.ingAtencion, METAS.ingresoAtencion)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Producci\xF3n por sill\xF3n",
+      value: clpK(K.prodSillon),
+      meta: `Meta ${clpK(METAS.produccionSillon)}`,
+      estado: est(K.prodSillon, METAS.produccionSillon)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Trazabilidad de origen",
+      value: pct(K.trazabilidad),
+      meta: `Meta ${pct(METAS.trazabilidad, 0)}`,
+      estado: est(K.trazabilidad, METAS.trazabilidad),
+      sub: `${K.conRef} de ${K.totalPN} con origen`
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--op)"
+    }, "EVOLUCI\xD3N"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
+        gap: 14,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Facturaci\xF3n mensual"), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 190
+    }, /*#__PURE__*/React.createElement(BarChart, {
+      data: serie,
+      margin: {
+        top: 8,
+        right: 4,
+        left: -14,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
       },
-      error: () => { notificar("error", "No se pudo leer el archivo."); setCargando(false); }
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false,
+      tickFormatter: v => (v / 1e6).toFixed(0) + "M"
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      formatter: v => clp(v),
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Bar, {
+      dataKey: "facturacion",
+      radius: [3, 3, 0, 0]
+    }, serie.map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+      key: i,
+      fill: s.periodo === periodo ? "#A78BFA" : "#3A3A45"
+    })))))), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Atenciones e ingreso por atenci\xF3n"), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 190
+    }, /*#__PURE__*/React.createElement(LineChart, {
+      data: serie,
+      margin: {
+        top: 8,
+        right: 4,
+        left: -14,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      yAxisId: "l",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      yAxisId: "r",
+      orientation: "right",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false,
+      tickFormatter: v => (v / 1000).toFixed(0) + "K"
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Legend, {
+      wrapperStyle: {
+        fontSize: 11
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      yAxisId: "l",
+      name: "Atenciones",
+      dataKey: "atenciones",
+      stroke: "#A78BFA",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      yAxisId: "r",
+      name: "Ing/atenci\xF3n",
+      dataKey: "ingAtencion",
+      stroke: "#4ADE80",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }))))), K.doctores.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--op)"
+    }, "PRODUCTIVIDAD POR PROFESIONAL"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Profesional"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Facturaci\xF3n"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "% del mes"))), /*#__PURE__*/React.createElement("tbody", null, K.doctores.map(d => /*#__PURE__*/React.createElement("tr", {
+      key: d.doctor
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--bone)"
+      }
+    }, d.doctor), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(d.monto)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, pct(d.pct)))))))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--meta)",
+      right: /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "var(--dim)"
+        }
+      }, pLargo(periodo))
+    }, "PUBLICIDAD DIGITAL"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "13px 16px",
+        marginBottom: 16,
+        borderLeft: `3px solid ${K.trazabilidad >= METAS.trazabilidad ? "var(--ok)" : "var(--warn)"}`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        lineHeight: 1.55
+      }
+    }, /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: K.trazabilidad >= METAS.trazabilidad ? "var(--ok)" : "var(--warn)"
+      }
+    }, "Trazabilidad ", pct(K.trazabilidad)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "var(--dim)"
+      }
+    }, " ", "\u2014 ", K.conRef, " de ", K.totalPN, " pacientes nuevos tienen origen registrado.", K.trazabilidad >= METAS.trazabilidad ? " El CPA y el ROAS de este mes son confiables." : " Bajo el 90% de referencia, el CPA y el ROAS subestiman la captación: los pacientes sin origen no se atribuyen a ningún canal."))), !inversion[periodo]?.meta && !inversion[periodo]?.google && /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "13px 16px",
+        marginBottom: 16,
+        borderLeft: "3px solid var(--warn)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: "var(--dim)"
+      }
+    }, "Falta la inversi\xF3n publicitaria de ", pLargo(periodo), ". Ingr\xE9sala abajo para calcular CPA y ROAS.")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
+        gap: 14,
+        marginBottom: 24
+      }
+    }, [["META ADS", K.meta, "var(--meta)", "meta"], ["GOOGLE ADS", K.google, "var(--goog)", "google"]].map(([nom, c, color, campo]) => /*#__PURE__*/React.createElement(Panel, {
+      key: campo,
+      style: {
+        padding: "16px 18px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        background: color
+      }
+    }), /*#__PURE__*/React.createElement("h3", {
+      style: {
+        fontSize: 19
+      }
+    }, nom)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        color: "var(--dim)",
+        display: "block",
+        marginBottom: 5
+      }
+    }, "Inversi\xF3n del mes"), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      inputMode: "numeric",
+      value: inversion[periodo]?.[campo] || "",
+      placeholder: "0",
+      onChange: e => guardarInversion(periodo, campo, e.target.value),
+      className: "mono",
+      style: {
+        fontSize: 15
+      }
+    })), /*#__PURE__*/React.createElement(Row, {
+      label: "Pacientes captados",
+      value: ent(c.pacientes)
+    }), /*#__PURE__*/React.createElement(Row, {
+      label: "CPA",
+      value: c.cpa ? clp(c.cpa) : "—",
+      hint: "Inversi\xF3n \xF7 pacientes captados"
+    }), /*#__PURE__*/React.createElement(Row, {
+      label: "Ingresos del mes",
+      value: clp(c.ingMes),
+      hint: "Lo que pagaron en su mes de ingreso"
+    }), /*#__PURE__*/React.createElement(Row, {
+      label: "ROAS del mes",
+      value: xN(c.roasMes),
+      meta: c.roasMes ? `Meta ${METAS.roas}x` : "",
+      estado: est(c.roasMes, METAS.roas)
+    }), /*#__PURE__*/React.createElement(Row, {
+      label: "Ingresos acumulados",
+      value: clp(c.ingAcum),
+      hint: "Todo lo que han pagado hasta hoy"
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 12,
+        padding: "12px 14px",
+        background: "#1A1A1D",
+        borderRadius: 8,
+        border: `1px solid ${color}33`
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, {
+      color: color
+    }, "ROAS acumulado de la cohorte"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: 10,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "disp",
+      style: {
+        fontSize: 30,
+        color
+      }
+    }, xN(c.roasAcum)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: c.roasAcum >= METAS.roas ? "var(--ok)" : "var(--bad)"
+      }
+    }, "Meta ", METAS.roas, "x")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10.5,
+        color: "var(--dim)",
+        marginTop: 5,
+        lineHeight: 1.5
+      }
+    }, "Crece cada mes: estos pacientes siguen generando ingresos despu\xE9s de su captaci\xF3n."))))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--meta)"
+    }, "ORIGEN DE LOS PACIENTES NUEVOS"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden",
+        marginBottom: 22
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Canal"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Pacientes"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Inversi\xF3n"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "CPA"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Ingresos mes"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Ingresos acum."), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "ROAS acum."))), /*#__PURE__*/React.createElement("tbody", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--meta)"
+      }
+    }, "Meta Ads"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.meta.pacientes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, K.meta.inversion ? clp(K.meta.inversion) : "—"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, K.meta.cpa ? clp(K.meta.cpa) : "—"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.meta.ingMes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.meta.ingAcum)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, xN(K.meta.roasAcum))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--goog)"
+      }
+    }, "Google Ads"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.google.pacientes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, K.google.inversion ? clp(K.google.inversion) : "—"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, K.google.cpa ? clp(K.google.cpa) : "—"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.google.ingMes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.google.ingAcum)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, xN(K.google.roasAcum))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--club)"
+      }
+    }, "Recomienda CEO"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.referidos.pacientes)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, "sin costo"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.referidos.ingMes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.referidos.ingAcum)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--dim)"
+      }
+    }, "Org\xE1nico"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.organico)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, "sin costo"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--warn)"
+      }
+    }, "Sin origen registrado"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.totalPN - K.conRef)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"))))))), tab === "mix" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--mix)",
+      right: /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "var(--dim)"
+        }
+      }, pLargo(periodo))
+    }, "CASOS NUEVOS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Casos nuevos ortodoncia",
+      value: ent(K.casosOrto),
+      meta: `Meta ${METAS.casosOrto}`,
+      estado: est(K.casosOrto, METAS.casosOrto),
+      sub: "Pacientes nuevos que inician ortodoncia"
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Casos nuevos implantes",
+      value: ent(K.casosImpl),
+      meta: `Meta ${METAS.casosImpl}`,
+      estado: est(K.casosImpl, METAS.casosImpl),
+      sub: "Por paciente y pieza tratada"
+    }), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "C\xF3mo se cuentan"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)",
+        lineHeight: 1.6,
+        marginTop: 4
+      }
+    }, "Ortodoncia cuenta una vez por paciente, en el mes de su primera prestaci\xF3n. Implantes cuenta una vez por pieza tratada; se excluyen corona y pilar sobre implante por ser etapas posteriores del mismo caso."))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--mix)"
+    }, "MIX DE INGRESOS POR CATEGOR\xCDA"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
+        gap: 14,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: Math.max(260, K.mix.filter(m => m.monto > 0).length * 26)
+    }, /*#__PURE__*/React.createElement(BarChart, {
+      data: K.mix.filter(m => m.monto > 0).sort((a, b) => b.monto - a.monto),
+      layout: "vertical",
+      margin: {
+        top: 4,
+        right: 14,
+        left: 8,
+        bottom: 4
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      horizontal: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      type: "number",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false,
+      tickFormatter: v => (v / 1e6).toFixed(0) + "M"
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      type: "category",
+      dataKey: "categoria",
+      width: 130,
+      tick: {
+        fill: "#E3E3E3",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      formatter: v => clp(v),
+      contentStyle: tt
+    }), /*#__PURE__*/React.createElement(Bar, {
+      dataKey: "monto",
+      fill: "#FB923C",
+      radius: [0, 3, 3, 0]
+    })))), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Categor\xEDa"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Ingresos"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "%"))), /*#__PURE__*/React.createElement("tbody", null, K.mix.filter(m => m.monto !== 0).sort((a, b) => b.monto - a.monto).map(m => /*#__PURE__*/React.createElement("tr", {
+      key: m.categoria
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: m.categoria.startsWith("OTRAS") ? "var(--warn)" : "var(--bone)"
+      }
+    }, m.categoria), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(m.monto)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, pct(m.pct)))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        fontWeight: 600
+      }
+    }, "TOTAL"), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        fontWeight: 600
+      }
+    }, clp(K.facturacion)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        fontWeight: 600
+      }
+    }, "100%"))))))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--mix)"
+    }, "CASOS NUEVOS EN EL TIEMPO"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 200
+    }, /*#__PURE__*/React.createElement(LineChart, {
+      data: serie,
+      margin: {
+        top: 8,
+        right: 6,
+        left: -16,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Legend, {
+      wrapperStyle: {
+        fontSize: 11
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      name: "Ortodoncia",
+      dataKey: "casosOrto",
+      stroke: "#FB923C",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      name: "Implantes",
+      dataKey: "casosImpl",
+      stroke: "#4C9AFF",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }))))), tab === "programas" && hayDatos && K && V && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--club)",
+      right: /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "var(--dim)"
+        }
+      }, pLargo(periodo))
+    }, "CLUB SONRISA CEO \xB7 INGRESOS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Otros tratamientos",
+      value: clpK(K.clubOtros),
+      sub: clp(K.clubOtros),
+      meta: `Meta ${clpK(METAS.clubOtros)}`,
+      estado: est(K.clubOtros, METAS.clubOtros),
+      color: "var(--club)"
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ortodoncia",
+      value: clpK(K.clubOrto),
+      sub: clp(K.clubOrto),
+      meta: `Meta ${clpK(METAS.clubOrto)}`,
+      estado: est(K.clubOrto, METAS.clubOrto)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Total Club Sonrisa",
+      value: clpK(K.clubTotal),
+      sub: clp(K.clubTotal),
+      meta: `Meta ${clpK(METAS.clubTotal)}`,
+      estado: est(K.clubTotal, METAS.clubTotal)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "% Otros sobre total",
+      value: pct(K.clubPctOtros),
+      meta: `Meta ${pct(METAS.clubPctOtros, 0)}`,
+      estado: est(K.clubPctOtros, METAS.clubPctOtros),
+      sub: "Mide el efecto real del programa"
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--club)",
+      right: /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "var(--dim)"
+        }
+      }, "Ventanas m\xF3viles al cierre de ", pLargo(periodo))
+    }, "AFILIACI\xD3N Y RETORNO"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(310px,1fr))",
+        gap: 14,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "16px 18px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, {
+      color: "var(--club)"
+    }, "Tasa de afiliaci\xF3n \xB7 ventana 12 meses"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: 12,
+        marginTop: 4,
+        marginBottom: 12,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "disp",
+      style: {
+        fontSize: 42,
+        lineHeight: .9,
+        color: V.tasaAfiliacion >= METAS.afiliacion ? "var(--ok)" : "var(--bad)"
+      }
+    }, pct(V.tasaAfiliacion)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)"
+      }
+    }, "Meta ", pct(METAS.afiliacion, 0))), /*#__PURE__*/React.createElement(Row, {
+      label: "Pacientes activos",
+      value: ent(V.pacientesActivos),
+      hint: "Con al menos una atenci\xF3n en 12 meses"
+    }), /*#__PURE__*/React.createElement(Row, {
+      label: "De ellos, socios del Club",
+      value: ent(V.sociosActivos)
+    }), /*#__PURE__*/React.createElement(Row, {
+      label: "Socios totales registrados",
+      value: ent(V.totalSocios),
+      hint: "Incluye socios sin actividad reciente"
+    })), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "16px 18px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, {
+      color: "var(--club)"
+    }, "Tasa de retorno \xB7 ventana 6 meses"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: 12,
+        marginTop: 4,
+        marginBottom: 12,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "disp",
+      style: {
+        fontSize: 42,
+        lineHeight: .9,
+        color: V.tasaRetorno >= METAS.retorno ? "var(--ok)" : "var(--bad)"
+      }
+    }, pct(V.tasaRetorno)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)"
+      }
+    }, "Meta ", pct(METAS.retorno, 0))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(3,1fr)",
+        gap: 8
+      }
+    }, [["Con retorno", V.retorno, "var(--ok)", "2 o más tratamientos"], ["En proceso", V.enProceso, "var(--warn)", "1 tratamiento"], ["Sin actividad", V.sinActividad, "var(--bad)", "ninguno"]].map(([l, v, c, h]) => /*#__PURE__*/React.createElement("div", {
+      key: l,
+      style: {
+        padding: "11px 10px",
+        background: "#1A1A1D",
+        borderRadius: 7,
+        borderTop: `2px solid ${c}`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "disp",
+      style: {
+        fontSize: 24,
+        color: c,
+        lineHeight: 1
+      }
+    }, ent(v)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "var(--bone)",
+        marginTop: 4
+      }
+    }, l), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9.5,
+        color: "#6E6E76",
+        marginTop: 1
+      }
+    }, h), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "var(--dim)",
+        marginTop: 3
+      }
+    }, V.totalSocios ? pct(v / V.totalSocios, 0) : "—")))), V.enProceso > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "var(--dim)",
+        marginTop: 12,
+        lineHeight: 1.55
+      }
+    }, "Los ", V.enProceso, " socios en proceso ya volvieron una vez en la ventana. Les falta un solo tratamiento distinto para pasar a retorno: es la palanca m\xE1s corta del programa."))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--club)"
+    }, "RECOMIENDA CEO"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Pacientes referidos",
+      value: ent(K.referidos.pacientes),
+      meta: `Meta ${METAS.referidos}/mes`,
+      estado: est(K.referidos.pacientes, METAS.referidos)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ingresos del mes",
+      value: clp(K.referidos.ingMes),
+      meta: `Meta ${clpK(METAS.ingresoReferidos)}`,
+      estado: est(K.referidos.ingMes, METAS.ingresoReferidos)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ingresos acumulados",
+      value: clp(K.referidos.ingAcum),
+      sub: "Todo lo pagado por los referidos de este mes",
+      color: "var(--club)"
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--club)"
+    }, "EVOLUCI\xD3N DE LOS PROGRAMAS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
+        gap: 14
+      }
+    }, /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Ingresos Club Sonrisa"), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 185
+    }, /*#__PURE__*/React.createElement(BarChart, {
+      data: serie,
+      margin: {
+        top: 8,
+        right: 4,
+        left: -14,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false,
+      tickFormatter: v => (v / 1e6).toFixed(0) + "M"
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      formatter: v => clp(v),
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Bar, {
+      dataKey: "club",
+      radius: [3, 3, 0, 0]
+    }, serie.map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+      key: i,
+      fill: s.periodo === periodo ? "#F472B6" : "#3A3A45"
+    })))))), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Pacientes referidos por mes"), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 185
+    }, /*#__PURE__*/React.createElement(BarChart, {
+      data: serie,
+      margin: {
+        top: 8,
+        right: 4,
+        left: -20,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Bar, {
+      dataKey: "referidos",
+      radius: [3, 3, 0, 0]
+    }, serie.map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+      key: i,
+      fill: s.periodo === periodo ? "#F472B6" : "#3A3A45"
+    })))))))), tab === "datos" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--bone)"
+    }, "CARGAR ARCHIVOS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(270px,1fr))",
+        gap: 14,
+        marginBottom: 28
+      }
+    }, [{
+      t: "Acciones realizadas",
+      d: "Reemplaza los meses que vengan dentro del archivo. Sirve tanto para el histórico completo como para el mes en curso.",
+      r: refAcc,
+      fn: subirAcciones,
+      n: acc.length,
+      u: "filas"
+    }, {
+      t: "Pacientes nuevos",
+      d: "Reemplaza los meses que vengan dentro del archivo. Puedes volver a subir el mes en curso las veces que quieras.",
+      r: refPn,
+      fn: subirPacientes,
+      n: pn.length,
+      u: "pacientes"
+    }, {
+      t: "Afiliados Club Sonrisa",
+      d: "Sobrescribe el listado completo. Es una foto de quién es socio hoy, no una serie histórica.",
+      r: refAf,
+      fn: subirAfiliados,
+      n: afiliados.length,
+      u: "socios"
+    }].map(c => /*#__PURE__*/React.createElement(Panel, {
+      key: c.t,
+      style: {
+        padding: "16px 18px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 11
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+      style: {
+        fontSize: 18
+      }
+    }, c.t.toUpperCase()), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)",
+        lineHeight: 1.55,
+        marginTop: 5
+      }
+    }, c.d)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+        marginTop: "auto",
+        paddingTop: 6,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "mono",
+      style: {
+        fontSize: 12,
+        color: c.n ? "var(--ok)" : "var(--dim)"
+      }
+    }, c.n ? `${c.n.toLocaleString("es-CL")} ${c.u}` : "sin datos"), /*#__PURE__*/React.createElement(Boton, {
+      tono: "claro",
+      chico: true,
+      disabled: cargando,
+      onClick: () => c.r.current?.click()
+    }, cargando ? "Procesando…" : "Elegir CSV")), /*#__PURE__*/React.createElement("input", {
+      ref: c.r,
+      type: "file",
+      accept: ".csv,text/csv",
+      style: {
+        display: "none"
+      },
+      onChange: e => {
+        const f = e.target.files?.[0];
+        if (f) c.fn(f);
+        e.target.value = "";
+      }
+    })))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--bone)"
+    }, "PER\xCDODOS EN EL SISTEMA"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))",
+        gap: 14,
+        marginBottom: 28
+      }
+    }, /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "16px 18px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Mapa de cobertura"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10
+      }
+    }, /*#__PURE__*/React.createElement(MapaPeriodos, {
+      periodosAcc: periodosAcc,
+      periodosPn: periodosPn,
+      sel: periodo,
+      onSel: setPeriodo
+    }))), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto",
+        maxHeight: 340
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Per\xEDodo"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Acciones"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Pac. nuevos"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, [...periodos].reverse().map(p => {
+      const nA = acc.filter(f => f[A_PER] === p).length;
+      const nP = pn.filter(r => r[P_PER] === p).length;
+      return /*#__PURE__*/React.createElement("tr", {
+        key: p
+      }, /*#__PURE__*/React.createElement("td", {
+        style: {
+          color: p === periodo ? "var(--txt)" : "var(--bone)",
+          fontWeight: p === periodo ? 600 : 400
+        }
+      }, pLargo(p)), /*#__PURE__*/React.createElement("td", {
+        className: "num",
+        style: {
+          color: nA ? "var(--txt)" : "#4A4A52"
+        }
+      }, nA || "—"), /*#__PURE__*/React.createElement("td", {
+        className: "num",
+        style: {
+          color: nP ? "var(--txt)" : "#4A4A52"
+        }
+      }, nP || "—"), /*#__PURE__*/React.createElement("td", {
+        style: {
+          textAlign: "right"
+        }
+      }, /*#__PURE__*/React.createElement(Boton, {
+        tono: "peli",
+        chico: true,
+        onClick: () => borrarPeriodo(p)
+      }, "Eliminar")));
+    })))))), periodos.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--bone)"
+    }, "INVERSI\xD3N PUBLICITARIA"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden",
+        marginBottom: 28
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Per\xEDodo"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        minWidth: 130
+      }
+    }, "Meta Ads"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        minWidth: 130
+      }
+    }, "Google Ads"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Total"))), /*#__PURE__*/React.createElement("tbody", null, [...periodos].reverse().map(p => {
+      const iv = inversion[p] || {};
+      return /*#__PURE__*/React.createElement("tr", {
+        key: p
+      }, /*#__PURE__*/React.createElement("td", {
+        style: {
+          color: "var(--bone)",
+          whiteSpace: "nowrap"
+        }
+      }, pLargo(p)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        inputMode: "numeric",
+        className: "mono",
+        placeholder: "0",
+        value: iv.meta || "",
+        onChange: e => guardarInversion(p, "meta", e.target.value)
+      })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        inputMode: "numeric",
+        className: "mono",
+        placeholder: "0",
+        value: iv.google || "",
+        onChange: e => guardarInversion(p, "google", e.target.value)
+      })), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, clp((iv.meta || 0) + (iv.google || 0))));
+    })))))), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "16px 18px"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "C\xF3mo funciona la carga"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "var(--dim)",
+        lineHeight: 1.7,
+        marginTop: 6
+      }
+    }, "Al subir un archivo el sistema detecta qu\xE9 meses trae y reemplaza por completo esos meses en la base de datos. Los dem\xE1s quedan intactos. Por eso puedes cargar el mes en curso cada semana sin duplicar nada.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("br", null), "Los datos quedan guardados en Supabase y son los mismos desde cualquier computador o celular donde inicies sesi\xF3n. Conserva igualmente los CSV mes a mes: son tu respaldo para repoblar todo si hiciera falta.")))), /*#__PURE__*/React.createElement("footer", {
+      style: {
+        borderTop: "1px solid var(--line)",
+        padding: "16px 22px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxWidth: 1320,
+        margin: "0 auto",
+        fontSize: 10.5,
+        color: "#5A5A62",
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 14,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "Centro de Especialidades Odontol\xF3gicas Santiago SpA \xB7 RUT 76.591.033-1"), /*#__PURE__*/React.createElement("span", null, acc.length.toLocaleString("es-CL"), " acciones \xB7 ", pn.length.toLocaleString("es-CL"), " pacientes nuevos \xB7 ", afiliados.length.toLocaleString("es-CL"), " socios"))));
+  }
+
+  /* ═══════════════════ RAÍZ: LOGIN + APP ═══════════════════ */
+  function Root() {
+    const [session, setSession] = useState(undefined); // undefined = cargando, null = sin sesión
+
+    useEffect(() => {
+      sb.auth.getSession().then(({
+        data
+      }) => setSession(data.session));
+      const {
+        data: listener
+      } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
+      return () => listener.subscription.unsubscribe();
+    }, []);
+    if (session === undefined) return /*#__PURE__*/React.createElement("div", {
+      className: "cmi",
+      style: {
+        display: "grid",
+        placeItems: "center",
+        minHeight: "100vh"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "disp",
+      style: {
+        fontSize: 22,
+        color: "var(--dim)"
+      }
+    }, "Cargando\u2026"));
+    if (!session) return /*#__PURE__*/React.createElement(Login, {
+      onLogin: setSession
     });
-  };
-
-  const borrarPeriodo = async (per) => {
-    await sb.from("cmi_acciones").delete().eq("periodo", per);
-    await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
-    await cargarTodo();
-    notificar("ok", `${pLargo(per)} eliminado.`);
-  };
-
-  const guardarInversion = async (per, campo, valor) => {
-    const actual = inversion[per] || { meta:0, google:0 };
-    const nuevaFila = { ...actual, [campo]: toNum(valor) };
-    const nueva = { ...inversion, [per]: nuevaFila };
-    setInversion(nueva);
-    await sb.from("cmi_inversion").upsert({ periodo: per, meta: nuevaFila.meta, google: nuevaFila.google });
-  };
-
-  if (!listo) return (
-    <div className="cmi" style={{ display:"grid", placeItems:"center", minHeight:"100vh" }}>
-      <div className="disp" style={{ fontSize:22, color:"var(--dim)" }}>Cargando datos…</div>
-    </div>
-  );
-
-  const hayDatos = periodos.length > 0;
-  const TABS = [
-    { id:"resumen",    n:"Resumen",          c:"var(--op)"   },
-    { id:"publicidad", n:"Publicidad",       c:"var(--meta)" },
-    { id:"mix",        n:"Mix de servicios", c:"var(--mix)"  },
-    { id:"programas",  n:"Programas",        c:"var(--club)" },
-    { id:"datos",      n:"Datos",            c:"var(--bone)" },
-  ];
-  const est = (v, m) => (v === null || v === undefined || !Number.isFinite(v)) ? null : (v >= m ? "ok" : "bad");
-  const tt = { background:"#1C1C1F", border:"1px solid #2A2A2F", borderRadius:8, fontSize:12 };
-
-  return (
-    <div className="cmi">
-      <header style={{ borderBottom:"1px solid var(--line)", background:"#0E0E10",
-                       position:"sticky", top:0, zIndex:20 }}>
-        <div style={{ maxWidth:1320, margin:"0 auto", padding:"16px 22px",
-                      display:"flex", alignItems:"center", justifyContent:"space-between", gap:20, flexWrap:"wrap" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-            <div style={{ width:34, height:34, borderRadius:8, background:"var(--bone)",
-                          display:"grid", placeItems:"center", flexShrink:0 }}>
-              <span className="disp" style={{ fontSize:19, color:"#0B0B0C" }}>C</span>
-            </div>
-            <div>
-              <h1 style={{ fontSize:23, lineHeight:1 }}>CEO CLÍNICA DENTAL</h1>
-              <div style={{ fontSize:11, color:"var(--dim)", letterSpacing:".05em", marginTop:2 }}>
-                Cuadro de mando comercial · Santiago
-              </div>
-            </div>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-            {hayDatos && (
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:10, letterSpacing:".12em", textTransform:"uppercase", color:"var(--dim)" }}>Período</span>
-                <select value={periodo || ""} onChange={e => setPeriodo(e.target.value)}
-                  style={{ width:"auto", minWidth:148, fontFamily:"'Bebas Neue',sans-serif",
-                           fontSize:17, letterSpacing:".04em", padding:"5px 10px" }}>
-                  {[...periodos].reverse().map(p => <option key={p} value={p}>{pLargo(p).toUpperCase()}</option>)}
-                </select>
-              </div>
-            )}
-            <Boton chico onClick={onLogout}>Salir</Boton>
-          </div>
-        </div>
-        <div style={{ maxWidth:1320, margin:"0 auto", padding:"0 22px", display:"flex", gap:2, overflowX:"auto" }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ padding:"9px 15px 10px", fontSize:12.5, fontWeight:500,
-                       color: tab===t.id ? "var(--txt)" : "var(--dim)",
-                       borderBottom: tab===t.id ? `2px solid ${t.c}` : "2px solid transparent",
-                       whiteSpace:"nowrap" }}>{t.n}</button>
-          ))}
-        </div>
-      </header>
-
-      {aviso && (
-        <div style={{ maxWidth:1320, margin:"12px auto 0", padding:"0 22px" }}>
-          <div style={{ padding:"11px 15px", borderRadius:8, fontSize:12.5, lineHeight:1.5,
-            background: aviso.tipo==="ok" ? "#152B1E" : "#2E1519",
-            border: `1px solid ${aviso.tipo==="ok" ? "#2C5741" : "#5A2A33"}`,
-            color: aviso.tipo==="ok" ? "var(--ok)" : "var(--bad)" }}>{aviso.texto}</div>
-        </div>
-      )}
-
-      <main style={{ maxWidth:1320, margin:"0 auto", padding:"22px 22px 70px" }}>
-
-        {!hayDatos && tab !== "datos" && (
-          <Vacio titulo="AÚN NO HAY DATOS"
-            texto="Carga el histórico de acciones realizadas, los pacientes nuevos y el listado de afiliados para empezar a ver los indicadores."
-            accion={<Boton tono="claro" onClick={() => setTab("datos")}>Ir a cargar archivos</Boton>} />
-        )}
-
-        {tab==="resumen" && hayDatos && K && (
-          <React.Fragment>
-            <SecTitle color="var(--op)" right={<span style={{ fontSize:11, color:"var(--dim)" }}>{pLargo(periodo)}</span>}>
-              OPERACIÓN DEL MES
-            </SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:11, marginBottom:26 }}>
-              <Metric label="Facturación" value={clpK(K.facturacion)} sub={clp(K.facturacion)} />
-              <Metric label="Atenciones totales" value={ent(K.atenciones)}
-                meta={`Meta ${METAS.atenciones}`} estado={est(K.atenciones, METAS.atenciones)} />
-              <Metric label="Pacientes únicos" value={ent(K.pacUnicos)}
-                meta={`Meta ${METAS.pacientesUnicos}`} estado={est(K.pacUnicos, METAS.pacientesUnicos)} />
-              <Metric label="Ingreso por atención" value={clp(K.ingAtencion)}
-                meta={`Meta ${clpK(METAS.ingresoAtencion)}`} estado={est(K.ingAtencion, METAS.ingresoAtencion)} />
-              <Metric label="Producción por sillón" value={clpK(K.prodSillon)}
-                meta={`Meta ${clpK(METAS.produccionSillon)}`} estado={est(K.prodSillon, METAS.produccionSillon)} />
-              <Metric label="Trazabilidad de origen" value={pct(K.trazabilidad)}
-                meta={`Meta ${pct(METAS.trazabilidad,0)}`} estado={est(K.trazabilidad, METAS.trazabilidad)}
-                sub={`${K.conRef} de ${K.totalPN} con origen`} />
-            </div>
-
-            <SecTitle color="var(--op)">EVOLUCIÓN</SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))", gap:14, marginBottom:26 }}>
-              <Panel style={{ padding:"14px 16px 8px" }}>
-                <Eyebrow>Facturación mensual</Eyebrow>
-                <ResponsiveContainer width="100%" height={190}>
-                  <BarChart data={serie} margin={{ top:8, right:4, left:-14, bottom:0 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="#26262A" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={{stroke:"#2A2A2F"}} tickLine={false} />
-                    <YAxis tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false}
-                           tickFormatter={v => (v/1e6).toFixed(0)+"M"} />
-                    <Tooltip formatter={v => clp(v)} contentStyle={tt} labelStyle={{color:"#E3E3E3"}} />
-                    <Bar dataKey="facturacion" radius={[3,3,0,0]}>
-                      {serie.map((s,i) => <Cell key={i} fill={s.periodo===periodo ? "#A78BFA" : "#3A3A45"} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Panel>
-              <Panel style={{ padding:"14px 16px 8px" }}>
-                <Eyebrow>Atenciones e ingreso por atención</Eyebrow>
-                <ResponsiveContainer width="100%" height={190}>
-                  <LineChart data={serie} margin={{ top:8, right:4, left:-14, bottom:0 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="#26262A" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={{stroke:"#2A2A2F"}} tickLine={false} />
-                    <YAxis yAxisId="l" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="r" orientation="right" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false}
-                           tickFormatter={v => (v/1000).toFixed(0)+"K"} />
-                    <Tooltip contentStyle={tt} labelStyle={{color:"#E3E3E3"}} />
-                    <Legend wrapperStyle={{ fontSize:11 }} />
-                    <Line yAxisId="l" name="Atenciones" dataKey="atenciones" stroke="#A78BFA" strokeWidth={2} dot={{r:2.5}} />
-                    <Line yAxisId="r" name="Ing/atención" dataKey="ingAtencion" stroke="#4ADE80" strokeWidth={2} dot={{r:2.5}} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </Panel>
-            </div>
-
-            {K.doctores.length > 0 && (
-              <React.Fragment>
-                <SecTitle color="var(--op)">PRODUCTIVIDAD POR PROFESIONAL</SecTitle>
-                <Panel style={{ overflow:"hidden" }}>
-                  <div style={{ overflowX:"auto" }}>
-                    <table>
-                      <thead><tr><th>Profesional</th><th className="num">Facturación</th><th className="num">% del mes</th></tr></thead>
-                      <tbody>
-                        {K.doctores.map(d => (
-                          <tr key={d.doctor}>
-                            <td style={{ color:"var(--bone)" }}>{d.doctor}</td>
-                            <td className="num">{clp(d.monto)}</td>
-                            <td className="num" style={{ color:"var(--dim)" }}>{pct(d.pct)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Panel>
-              </React.Fragment>
-            )}
-          </React.Fragment>
-        )}
-
-        {tab==="publicidad" && hayDatos && K && (
-          <React.Fragment>
-            <SecTitle color="var(--meta)" right={<span style={{ fontSize:11, color:"var(--dim)" }}>{pLargo(periodo)}</span>}>
-              PUBLICIDAD DIGITAL
-            </SecTitle>
-            <Panel style={{ padding:"13px 16px", marginBottom:16,
-              borderLeft:`3px solid ${K.trazabilidad >= METAS.trazabilidad ? "var(--ok)" : "var(--warn)"}` }}>
-              <div style={{ fontSize:12.5, lineHeight:1.55 }}>
-                <strong style={{ color: K.trazabilidad >= METAS.trazabilidad ? "var(--ok)" : "var(--warn)" }}>
-                  Trazabilidad {pct(K.trazabilidad)}
-                </strong>
-                <span style={{ color:"var(--dim)" }}>
-                  {" "}— {K.conRef} de {K.totalPN} pacientes nuevos tienen origen registrado.
-                  {K.trazabilidad >= METAS.trazabilidad
-                    ? " El CPA y el ROAS de este mes son confiables."
-                    : " Bajo el 90% de referencia, el CPA y el ROAS subestiman la captación: los pacientes sin origen no se atribuyen a ningún canal."}
-                </span>
-              </div>
-            </Panel>
-            {(!inversion[periodo]?.meta && !inversion[periodo]?.google) && (
-              <Panel style={{ padding:"13px 16px", marginBottom:16, borderLeft:"3px solid var(--warn)" }}>
-                <div style={{ fontSize:12.5, color:"var(--dim)" }}>
-                  Falta la inversión publicitaria de {pLargo(periodo)}. Ingrésala abajo para calcular CPA y ROAS.
-                </div>
-              </Panel>
-            )}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))", gap:14, marginBottom:24 }}>
-              {[["META ADS", K.meta, "var(--meta)", "meta"], ["GOOGLE ADS", K.google, "var(--goog)", "google"]].map(([nom, c, color, campo]) => (
-                <Panel key={campo} style={{ padding:"16px 18px" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:14 }}>
-                    <span style={{ width:8, height:8, borderRadius:2, background:color }} />
-                    <h3 style={{ fontSize:19 }}>{nom}</h3>
-                  </div>
-                  <div style={{ marginBottom:14 }}>
-                    <label style={{ fontSize:10, letterSpacing:".12em", textTransform:"uppercase",
-                                    color:"var(--dim)", display:"block", marginBottom:5 }}>Inversión del mes</label>
-                    <input type="text" inputMode="numeric" value={inversion[periodo]?.[campo] || ""} placeholder="0"
-                      onChange={e => guardarInversion(periodo, campo, e.target.value)} className="mono" style={{ fontSize:15 }} />
-                  </div>
-                  <Row label="Pacientes captados" value={ent(c.pacientes)} />
-                  <Row label="CPA" value={c.cpa ? clp(c.cpa) : "—"} hint="Inversión ÷ pacientes captados" />
-                  <Row label="Ingresos del mes" value={clp(c.ingMes)} hint="Lo que pagaron en su mes de ingreso" />
-                  <Row label="ROAS del mes" value={xN(c.roasMes)} meta={c.roasMes ? `Meta ${METAS.roas}x` : ""} estado={est(c.roasMes, METAS.roas)} />
-                  <Row label="Ingresos acumulados" value={clp(c.ingAcum)} hint="Todo lo que han pagado hasta hoy" />
-                  <div style={{ marginTop:12, padding:"12px 14px", background:"#1A1A1D", borderRadius:8, border:`1px solid ${color}33` }}>
-                    <Eyebrow color={color}>ROAS acumulado de la cohorte</Eyebrow>
-                    <div style={{ display:"flex", alignItems:"baseline", gap:10, flexWrap:"wrap" }}>
-                      <span className="disp" style={{ fontSize:30, color }}>{xN(c.roasAcum)}</span>
-                      <span style={{ fontSize:11, color: c.roasAcum >= METAS.roas ? "var(--ok)" : "var(--bad)" }}>Meta {METAS.roas}x</span>
-                    </div>
-                    <div style={{ fontSize:10.5, color:"var(--dim)", marginTop:5, lineHeight:1.5 }}>
-                      Crece cada mes: estos pacientes siguen generando ingresos después de su captación.
-                    </div>
-                  </div>
-                </Panel>
-              ))}
-            </div>
-            <SecTitle color="var(--meta)">ORIGEN DE LOS PACIENTES NUEVOS</SecTitle>
-            <Panel style={{ overflow:"hidden", marginBottom:22 }}>
-              <div style={{ overflowX:"auto" }}>
-                <table>
-                  <thead><tr><th>Canal</th><th className="num">Pacientes</th><th className="num">Inversión</th>
-                    <th className="num">CPA</th><th className="num">Ingresos mes</th>
-                    <th className="num">Ingresos acum.</th><th className="num">ROAS acum.</th></tr></thead>
-                  <tbody>
-                    <tr><td style={{color:"var(--meta)"}}>Meta Ads</td><td className="num">{ent(K.meta.pacientes)}</td>
-                      <td className="num">{K.meta.inversion ? clp(K.meta.inversion) : "—"}</td>
-                      <td className="num">{K.meta.cpa ? clp(K.meta.cpa) : "—"}</td>
-                      <td className="num">{clp(K.meta.ingMes)}</td><td className="num">{clp(K.meta.ingAcum)}</td>
-                      <td className="num">{xN(K.meta.roasAcum)}</td></tr>
-                    <tr><td style={{color:"var(--goog)"}}>Google Ads</td><td className="num">{ent(K.google.pacientes)}</td>
-                      <td className="num">{K.google.inversion ? clp(K.google.inversion) : "—"}</td>
-                      <td className="num">{K.google.cpa ? clp(K.google.cpa) : "—"}</td>
-                      <td className="num">{clp(K.google.ingMes)}</td><td className="num">{clp(K.google.ingAcum)}</td>
-                      <td className="num">{xN(K.google.roasAcum)}</td></tr>
-                    <tr><td style={{color:"var(--club)"}}>Recomienda CEO</td><td className="num">{ent(K.referidos.pacientes)}</td>
-                      <td className="num" style={{color:"var(--dim)"}}>sin costo</td><td className="num">—</td>
-                      <td className="num">{clp(K.referidos.ingMes)}</td><td className="num">{clp(K.referidos.ingAcum)}</td>
-                      <td className="num">—</td></tr>
-                    <tr><td style={{color:"var(--dim)"}}>Orgánico</td><td className="num">{ent(K.organico)}</td>
-                      <td className="num" style={{color:"var(--dim)"}}>sin costo</td><td className="num">—</td>
-                      <td className="num">—</td><td className="num">—</td><td className="num">—</td></tr>
-                    <tr><td style={{color:"var(--warn)"}}>Sin origen registrado</td>
-                      <td className="num">{ent(K.totalPN - K.conRef)}</td>
-                      <td className="num">—</td><td className="num">—</td><td className="num">—</td>
-                      <td className="num">—</td><td className="num">—</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </Panel>
-          </React.Fragment>
-        )}
-
-        {tab==="mix" && hayDatos && K && (
-          <React.Fragment>
-            <SecTitle color="var(--mix)" right={<span style={{ fontSize:11, color:"var(--dim)" }}>{pLargo(periodo)}</span>}>
-              CASOS NUEVOS
-            </SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:11, marginBottom:26 }}>
-              <Metric label="Casos nuevos ortodoncia" value={ent(K.casosOrto)}
-                meta={`Meta ${METAS.casosOrto}`} estado={est(K.casosOrto, METAS.casosOrto)}
-                sub="Pacientes nuevos que inician ortodoncia" />
-              <Metric label="Casos nuevos implantes" value={ent(K.casosImpl)}
-                meta={`Meta ${METAS.casosImpl}`} estado={est(K.casosImpl, METAS.casosImpl)}
-                sub="Por paciente y pieza tratada" />
-              <Panel style={{ padding:"14px 16px" }}>
-                <Eyebrow>Cómo se cuentan</Eyebrow>
-                <div style={{ fontSize:11.5, color:"var(--dim)", lineHeight:1.6, marginTop:4 }}>
-                  Ortodoncia cuenta una vez por paciente, en el mes de su primera prestación.
-                  Implantes cuenta una vez por pieza tratada; se excluyen corona y pilar sobre implante
-                  por ser etapas posteriores del mismo caso.
-                </div>
-              </Panel>
-            </div>
-            <SecTitle color="var(--mix)">MIX DE INGRESOS POR CATEGORÍA</SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))", gap:14, marginBottom:26 }}>
-              <Panel style={{ padding:"14px 16px 8px" }}>
-                <ResponsiveContainer width="100%" height={Math.max(260, K.mix.filter(m=>m.monto>0).length*26)}>
-                  <BarChart data={K.mix.filter(m=>m.monto>0).sort((a,b)=>b.monto-a.monto)}
-                    layout="vertical" margin={{ top:4, right:14, left:8, bottom:4 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="#26262A" horizontal={false} />
-                    <XAxis type="number" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false}
-                           tickFormatter={v => (v/1e6).toFixed(0)+"M"} />
-                    <YAxis type="category" dataKey="categoria" width={130}
-                           tick={{ fill:"#E3E3E3", fontSize:10 }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={v => clp(v)} contentStyle={tt} />
-                    <Bar dataKey="monto" fill="#FB923C" radius={[0,3,3,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Panel>
-              <Panel style={{ overflow:"hidden" }}>
-                <div style={{ overflowX:"auto" }}>
-                  <table>
-                    <thead><tr><th>Categoría</th><th className="num">Ingresos</th><th className="num">%</th></tr></thead>
-                    <tbody>
-                      {K.mix.filter(m=>m.monto!==0).sort((a,b)=>b.monto-a.monto).map(m => (
-                        <tr key={m.categoria}>
-                          <td style={{ color: m.categoria.startsWith("OTRAS") ? "var(--warn)" : "var(--bone)" }}>{m.categoria}</td>
-                          <td className="num">{clp(m.monto)}</td>
-                          <td className="num" style={{ color:"var(--dim)" }}>{pct(m.pct)}</td>
-                        </tr>
-                      ))}
-                      <tr><td style={{ fontWeight:600 }}>TOTAL</td>
-                        <td className="num" style={{ fontWeight:600 }}>{clp(K.facturacion)}</td>
-                        <td className="num" style={{ fontWeight:600 }}>100%</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </Panel>
-            </div>
-            <SecTitle color="var(--mix)">CASOS NUEVOS EN EL TIEMPO</SecTitle>
-            <Panel style={{ padding:"14px 16px 8px" }}>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={serie} margin={{ top:8, right:6, left:-16, bottom:0 }}>
-                  <CartesianGrid strokeDasharray="2 4" stroke="#26262A" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={{stroke:"#2A2A2F"}} tickLine={false} />
-                  <YAxis tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={tt} labelStyle={{color:"#E3E3E3"}} />
-                  <Legend wrapperStyle={{ fontSize:11 }} />
-                  <Line name="Ortodoncia" dataKey="casosOrto" stroke="#FB923C" strokeWidth={2} dot={{r:2.5}} />
-                  <Line name="Implantes" dataKey="casosImpl" stroke="#4C9AFF" strokeWidth={2} dot={{r:2.5}} />
-                </LineChart>
-              </ResponsiveContainer>
-            </Panel>
-          </React.Fragment>
-        )}
-
-        {tab==="programas" && hayDatos && K && V && (
-          <React.Fragment>
-            <SecTitle color="var(--club)" right={<span style={{ fontSize:11, color:"var(--dim)" }}>{pLargo(periodo)}</span>}>
-              CLUB SONRISA CEO · INGRESOS
-            </SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:11, marginBottom:26 }}>
-              <Metric label="Otros tratamientos" value={clpK(K.clubOtros)} sub={clp(K.clubOtros)}
-                meta={`Meta ${clpK(METAS.clubOtros)}`} estado={est(K.clubOtros, METAS.clubOtros)} color="var(--club)" />
-              <Metric label="Ortodoncia" value={clpK(K.clubOrto)} sub={clp(K.clubOrto)}
-                meta={`Meta ${clpK(METAS.clubOrto)}`} estado={est(K.clubOrto, METAS.clubOrto)} />
-              <Metric label="Total Club Sonrisa" value={clpK(K.clubTotal)} sub={clp(K.clubTotal)}
-                meta={`Meta ${clpK(METAS.clubTotal)}`} estado={est(K.clubTotal, METAS.clubTotal)} />
-              <Metric label="% Otros sobre total" value={pct(K.clubPctOtros)}
-                meta={`Meta ${pct(METAS.clubPctOtros,0)}`} estado={est(K.clubPctOtros, METAS.clubPctOtros)}
-                sub="Mide el efecto real del programa" />
-            </div>
-            <SecTitle color="var(--club)"
-              right={<span style={{ fontSize:11, color:"var(--dim)" }}>Ventanas móviles al cierre de {pLargo(periodo)}</span>}>
-              AFILIACIÓN Y RETORNO
-            </SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(310px,1fr))", gap:14, marginBottom:26 }}>
-              <Panel style={{ padding:"16px 18px" }}>
-                <Eyebrow color="var(--club)">Tasa de afiliación · ventana 12 meses</Eyebrow>
-                <div style={{ display:"flex", alignItems:"baseline", gap:12, marginTop:4, marginBottom:12, flexWrap:"wrap" }}>
-                  <span className="disp" style={{ fontSize:42, lineHeight:.9,
-                    color: V.tasaAfiliacion >= METAS.afiliacion ? "var(--ok)" : "var(--bad)" }}>{pct(V.tasaAfiliacion)}</span>
-                  <span style={{ fontSize:11.5, color:"var(--dim)" }}>Meta {pct(METAS.afiliacion,0)}</span>
-                </div>
-                <Row label="Pacientes activos" value={ent(V.pacientesActivos)} hint="Con al menos una atención en 12 meses" />
-                <Row label="De ellos, socios del Club" value={ent(V.sociosActivos)} />
-                <Row label="Socios totales registrados" value={ent(V.totalSocios)} hint="Incluye socios sin actividad reciente" />
-              </Panel>
-              <Panel style={{ padding:"16px 18px" }}>
-                <Eyebrow color="var(--club)">Tasa de retorno · ventana 6 meses</Eyebrow>
-                <div style={{ display:"flex", alignItems:"baseline", gap:12, marginTop:4, marginBottom:12, flexWrap:"wrap" }}>
-                  <span className="disp" style={{ fontSize:42, lineHeight:.9,
-                    color: V.tasaRetorno >= METAS.retorno ? "var(--ok)" : "var(--bad)" }}>{pct(V.tasaRetorno)}</span>
-                  <span style={{ fontSize:11.5, color:"var(--dim)" }}>Meta {pct(METAS.retorno,0)}</span>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-                  {[["Con retorno", V.retorno, "var(--ok)", "2 o más tratamientos"],
-                    ["En proceso", V.enProceso, "var(--warn)", "1 tratamiento"],
-                    ["Sin actividad", V.sinActividad, "var(--bad)", "ninguno"]].map(([l,v,c,h]) => (
-                    <div key={l} style={{ padding:"11px 10px", background:"#1A1A1D", borderRadius:7, borderTop:`2px solid ${c}` }}>
-                      <div className="disp" style={{ fontSize:24, color:c, lineHeight:1 }}>{ent(v)}</div>
-                      <div style={{ fontSize:10, color:"var(--bone)", marginTop:4 }}>{l}</div>
-                      <div style={{ fontSize:9.5, color:"#6E6E76", marginTop:1 }}>{h}</div>
-                      <div style={{ fontSize:10, color:"var(--dim)", marginTop:3 }}>{V.totalSocios ? pct(v/V.totalSocios,0) : "—"}</div>
-                    </div>
-                  ))}
-                </div>
-                {V.enProceso > 0 && (
-                  <div style={{ fontSize:11, color:"var(--dim)", marginTop:12, lineHeight:1.55 }}>
-                    Los {V.enProceso} socios en proceso ya volvieron una vez en la ventana. Les falta
-                    un solo tratamiento distinto para pasar a retorno: es la palanca más corta del programa.
-                  </div>
-                )}
-              </Panel>
-            </div>
-            <SecTitle color="var(--club)">RECOMIENDA CEO</SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:11, marginBottom:26 }}>
-              <Metric label="Pacientes referidos" value={ent(K.referidos.pacientes)}
-                meta={`Meta ${METAS.referidos}/mes`} estado={est(K.referidos.pacientes, METAS.referidos)} />
-              <Metric label="Ingresos del mes" value={clp(K.referidos.ingMes)}
-                meta={`Meta ${clpK(METAS.ingresoReferidos)}`} estado={est(K.referidos.ingMes, METAS.ingresoReferidos)} />
-              <Metric label="Ingresos acumulados" value={clp(K.referidos.ingAcum)}
-                sub="Todo lo pagado por los referidos de este mes" color="var(--club)" />
-            </div>
-            <SecTitle color="var(--club)">EVOLUCIÓN DE LOS PROGRAMAS</SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))", gap:14 }}>
-              <Panel style={{ padding:"14px 16px 8px" }}>
-                <Eyebrow>Ingresos Club Sonrisa</Eyebrow>
-                <ResponsiveContainer width="100%" height={185}>
-                  <BarChart data={serie} margin={{ top:8, right:4, left:-14, bottom:0 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="#26262A" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={{stroke:"#2A2A2F"}} tickLine={false} />
-                    <YAxis tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false}
-                           tickFormatter={v => (v/1e6).toFixed(0)+"M"} />
-                    <Tooltip formatter={v => clp(v)} contentStyle={tt} labelStyle={{color:"#E3E3E3"}} />
-                    <Bar dataKey="club" radius={[3,3,0,0]}>
-                      {serie.map((s,i) => <Cell key={i} fill={s.periodo===periodo ? "#F472B6" : "#3A3A45"} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Panel>
-              <Panel style={{ padding:"14px 16px 8px" }}>
-                <Eyebrow>Pacientes referidos por mes</Eyebrow>
-                <ResponsiveContainer width="100%" height={185}>
-                  <BarChart data={serie} margin={{ top:8, right:4, left:-20, bottom:0 }}>
-                    <CartesianGrid strokeDasharray="2 4" stroke="#26262A" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={{stroke:"#2A2A2F"}} tickLine={false} />
-                    <YAxis tick={{ fill:"#9A9AA2", fontSize:10 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={tt} labelStyle={{color:"#E3E3E3"}} />
-                    <Bar dataKey="referidos" radius={[3,3,0,0]}>
-                      {serie.map((s,i) => <Cell key={i} fill={s.periodo===periodo ? "#F472B6" : "#3A3A45"} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Panel>
-            </div>
-          </React.Fragment>
-        )}
-
-        {tab==="datos" && (
-          <React.Fragment>
-            <SecTitle color="var(--bone)">CARGAR ARCHIVOS</SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(270px,1fr))", gap:14, marginBottom:28 }}>
-              {[
-                { t:"Acciones realizadas", d:"Reemplaza los meses que vengan dentro del archivo. Sirve tanto para el histórico completo como para el mes en curso.",
-                  r:refAcc, fn:subirAcciones, n:acc.length, u:"filas" },
-                { t:"Pacientes nuevos", d:"Reemplaza los meses que vengan dentro del archivo. Puedes volver a subir el mes en curso las veces que quieras.",
-                  r:refPn, fn:subirPacientes, n:pn.length, u:"pacientes" },
-                { t:"Afiliados Club Sonrisa", d:"Sobrescribe el listado completo. Es una foto de quién es socio hoy, no una serie histórica.",
-                  r:refAf, fn:subirAfiliados, n:afiliados.length, u:"socios" },
-              ].map(c => (
-                <Panel key={c.t} style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:11 }}>
-                  <div>
-                    <h3 style={{ fontSize:18 }}>{c.t.toUpperCase()}</h3>
-                    <div style={{ fontSize:11.5, color:"var(--dim)", lineHeight:1.55, marginTop:5 }}>{c.d}</div>
-                  </div>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                                gap:10, marginTop:"auto", paddingTop:6, flexWrap:"wrap" }}>
-                    <span className="mono" style={{ fontSize:12, color: c.n ? "var(--ok)" : "var(--dim)" }}>
-                      {c.n ? `${c.n.toLocaleString("es-CL")} ${c.u}` : "sin datos"}
-                    </span>
-                    <Boton tono="claro" chico disabled={cargando} onClick={() => c.r.current?.click()}>
-                      {cargando ? "Procesando…" : "Elegir CSV"}
-                    </Boton>
-                  </div>
-                  <input ref={c.r} type="file" accept=".csv,text/csv" style={{ display:"none" }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) c.fn(f); e.target.value = ""; }} />
-                </Panel>
-              ))}
-            </div>
-            <SecTitle color="var(--bone)">PERÍODOS EN EL SISTEMA</SecTitle>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(290px,1fr))", gap:14, marginBottom:28 }}>
-              <Panel style={{ padding:"16px 18px" }}>
-                <Eyebrow>Mapa de cobertura</Eyebrow>
-                <div style={{ marginTop:10 }}>
-                  <MapaPeriodos periodosAcc={periodosAcc} periodosPn={periodosPn} sel={periodo} onSel={setPeriodo} />
-                </div>
-              </Panel>
-              <Panel style={{ overflow:"hidden" }}>
-                <div style={{ overflowX:"auto", maxHeight:340 }}>
-                  <table>
-                    <thead><tr><th>Período</th><th className="num">Acciones</th><th className="num">Pac. nuevos</th><th></th></tr></thead>
-                    <tbody>
-                      {[...periodos].reverse().map(p => {
-                        const nA = acc.filter(f=>f[A_PER]===p).length;
-                        const nP = pn.filter(r=>r[P_PER]===p).length;
-                        return (
-                          <tr key={p}>
-                            <td style={{ color: p===periodo ? "var(--txt)" : "var(--bone)",
-                                         fontWeight: p===periodo ? 600 : 400 }}>{pLargo(p)}</td>
-                            <td className="num" style={{ color: nA ? "var(--txt)" : "#4A4A52" }}>{nA || "—"}</td>
-                            <td className="num" style={{ color: nP ? "var(--txt)" : "#4A4A52" }}>{nP || "—"}</td>
-                            <td style={{ textAlign:"right" }}>
-                              <Boton tono="peli" chico onClick={() => borrarPeriodo(p)}>Eliminar</Boton>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </Panel>
-            </div>
-            {periodos.length > 0 && (
-              <React.Fragment>
-                <SecTitle color="var(--bone)">INVERSIÓN PUBLICITARIA</SecTitle>
-                <Panel style={{ overflow:"hidden", marginBottom:28 }}>
-                  <div style={{ overflowX:"auto" }}>
-                    <table>
-                      <thead><tr><th>Período</th><th style={{minWidth:130}}>Meta Ads</th><th style={{minWidth:130}}>Google Ads</th><th className="num">Total</th></tr></thead>
-                      <tbody>
-                        {[...periodos].reverse().map(p => {
-                          const iv = inversion[p] || {};
-                          return (
-                            <tr key={p}>
-                              <td style={{ color:"var(--bone)", whiteSpace:"nowrap" }}>{pLargo(p)}</td>
-                              <td><input type="text" inputMode="numeric" className="mono" placeholder="0"
-                                value={iv.meta || ""} onChange={e => guardarInversion(p, "meta", e.target.value)} /></td>
-                              <td><input type="text" inputMode="numeric" className="mono" placeholder="0"
-                                value={iv.google || ""} onChange={e => guardarInversion(p, "google", e.target.value)} /></td>
-                              <td className="num">{clp((iv.meta||0)+(iv.google||0))}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </Panel>
-              </React.Fragment>
-            )}
-            <Panel style={{ padding:"16px 18px" }}>
-              <Eyebrow>Cómo funciona la carga</Eyebrow>
-              <div style={{ fontSize:12, color:"var(--dim)", lineHeight:1.7, marginTop:6 }}>
-                Al subir un archivo el sistema detecta qué meses trae y reemplaza por completo esos meses en la base de datos.
-                Los demás quedan intactos. Por eso puedes cargar el mes en curso cada semana sin duplicar nada.<br /><br />
-                Los datos quedan guardados en Supabase y son los mismos desde cualquier computador o celular donde inicies sesión.
-                Conserva igualmente los CSV mes a mes: son tu respaldo para repoblar todo si hiciera falta.
-              </div>
-            </Panel>
-          </React.Fragment>
-        )}
-      </main>
-
-      <footer style={{ borderTop:"1px solid var(--line)", padding:"16px 22px" }}>
-        <div style={{ maxWidth:1320, margin:"0 auto", fontSize:10.5, color:"#5A5A62",
-                      display:"flex", justifyContent:"space-between", gap:14, flexWrap:"wrap" }}>
-          <span>Centro de Especialidades Odontológicas Santiago SpA · RUT 76.591.033-1</span>
-          <span>{acc.length.toLocaleString("es-CL")} acciones · {pn.length.toLocaleString("es-CL")} pacientes nuevos · {afiliados.length.toLocaleString("es-CL")} socios</span>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-/* ═══════════════════ RAÍZ: LOGIN + APP ═══════════════════ */
-function Root() {
-  const [session, setSession] = useState(undefined); // undefined = cargando, null = sin sesión
-
-  useEffect(() => {
-    sb.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = sb.auth.onAuthStateChange((_event, sess) => setSession(sess));
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  if (session === undefined) return (
-    <div className="cmi" style={{ display:"grid", placeItems:"center", minHeight:"100vh" }}>
-      <div className="disp" style={{ fontSize:22, color:"var(--dim)" }}>Cargando…</div>
-    </div>
-  );
-  if (!session) return <Login onLogin={setSession} />;
-  return <PanelCMI session={session} onLogout={() => sb.auth.signOut()} />;
-}
-
-document.getElementById("root").dataset.appReady = "1";
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<Root />);
-
+    return /*#__PURE__*/React.createElement(PanelCMI, {
+      session: session,
+      onLogout: () => sb.auth.signOut()
+    });
+  }
+  document.getElementById("root").dataset.appReady = "1";
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(/*#__PURE__*/React.createElement(Root, null));
 } catch (e) {
   console.error("Error al iniciar el panel:", e);
-  document.getElementById("root").innerHTML =
-    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:#0B0B0C;color:#fff;font-family:system-ui,sans-serif">' +
-    '<div><div style="font-size:24px;font-weight:700;color:#FB7185">NO SE PUDO INICIAR EL PANEL</div>' +
-    '<div style="font-size:13px;color:#9A9AA2;margin-top:10px;max-width:440px">' + (e && e.message ? e.message : String(e)) + '</div>' +
-    '<div style="font-size:11px;color:#5A5A62;margin-top:16px">Si el problema persiste, avisa a Claude con este mensaje de error.</div></div></div>';
+  document.getElementById("root").innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:#0B0B0C;color:#fff;font-family:system-ui,sans-serif">' + '<div><div style="font-size:24px;font-weight:700;color:#FB7185">NO SE PUDO INICIAR EL PANEL</div>' + '<div style="font-size:13px;color:#9A9AA2;margin-top:10px;max-width:440px">' + (e && e.message ? e.message : String(e)) + '</div>' + '<div style="font-size:11px;color:#5A5A62;margin-top:16px">Si el problema persiste, avisa a Claude con este mensaje de error.</div></div></div>';
 }
 </script>
 </body>
