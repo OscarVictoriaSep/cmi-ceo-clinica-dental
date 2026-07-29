@@ -8,7 +8,8 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://unpkg.com/react-is@18/umd/react-is.production.min.js"></script>
-<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
+<script src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -65,7 +66,8 @@ try {
   if (!window.React) throw new Error("React no cargó. Revisa tu conexión a internet y recarga la página.");
   if (!window.ReactDOM) throw new Error("ReactDOM no cargó. Revisa tu conexión a internet y recarga la página.");
   if (!window.Papa) throw new Error("PapaParse no cargó. Revisa tu conexión a internet y recarga la página.");
-  if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a internet y recarga la página.");
+  if (!window.PropTypes) throw new Error("PropTypes no cargó. Revisa tu conexión a internet y recarga la página.");
+if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a internet y recarga la página.");
   if (!window.supabase) throw new Error("La librería de Supabase no cargó. Revisa tu conexión a internet y recarga la página.");
   const {
     useState,
@@ -908,16 +910,28 @@ try {
       });
       setTimeout(() => setAviso(null), 7000);
     };
+    const traerTodasLasFilas = async (tabla, columnas) => {
+      let todas = [];
+      let desde = 0;
+      const tamanoPagina = 1000;
+      while (true) {
+        const { data, error } = await sb.from(tabla).select(columnas)
+          .range(desde, desde + tamanoPagina - 1);
+        if (error) { console.error("Error trayendo " + tabla, error); break; }
+        if (!data || data.length === 0) break;
+        todas = todas.concat(data);
+        if (data.length < tamanoPagina) break;
+        desde += tamanoPagina;
+      }
+      return todas;
+    };
     const cargarTodo = async () => {
-      const [{
-        data: da
-      }, {
-        data: dp
-      }, {
-        data: df
-      }, {
-        data: di
-      }] = await Promise.all([sb.from("cmi_acciones").select("*"), sb.from("cmi_pacientes_nuevos").select("*"), sb.from("cmi_afiliados").select("rut"), sb.from("cmi_inversion").select("*")]);
+      const [da, dp, df, di] = await Promise.all([
+        traerTodasLasFilas("cmi_acciones", "*"),
+        traerTodasLasFilas("cmi_pacientes_nuevos", "*"),
+        traerTodasLasFilas("cmi_afiliados", "rut"),
+        traerTodasLasFilas("cmi_inversion", "*"),
+      ]);
       setAcc((da || []).map(accToArr));
       setPn((dp || []).map(pnToArr));
       setAfiliados((df || []).map(r => r.rut));
