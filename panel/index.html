@@ -8,8 +8,9 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://unpkg.com/recharts@2.12.0/umd/Recharts.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/react-is@18/umd/react-is.production.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
   html,body{margin:0;padding:0}
@@ -43,9 +44,32 @@
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B0B0C;color:#9A9AA2;font-family:system-ui,sans-serif;font-size:15px">
+    Cargando panel…
+  </div>
+</div>
+<script>
+  window.addEventListener("error", function(ev) {
+    var root = document.getElementById("root");
+    if (root && root.dataset.appReady) return;
+    root.innerHTML =
+      '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:#0B0B0C;color:#fff;font-family:system-ui,sans-serif">' +
+      '<div><div style="font-size:24px;font-weight:700;color:#FB7185">NO SE PUDO INICIAR EL PANEL</div>' +
+      '<div style="font-size:13px;color:#9A9AA2;margin-top:10px;max-width:440px">' + (ev.message || "Error desconocido al cargar un recurso.") + '</div>' +
+      '<div style="font-size:11px;color:#5A5A62;margin-top:16px">Revisa tu conexión a internet y recarga la página. Si el problema persiste, avisa a Claude con este mensaje.</div></div></div>';
+  }, true);
+</script>
 
 <script type="text/babel" data-presets="react,env">
+try {
+
+if (!window.React) throw new Error("React no cargó. Revisa tu conexión a internet y recarga la página.");
+if (!window.ReactDOM) throw new Error("ReactDOM no cargó. Revisa tu conexión a internet y recarga la página.");
+if (!window.Papa) throw new Error("PapaParse no cargó. Revisa tu conexión a internet y recarga la página.");
+if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a internet y recarga la página.");
+if (!window.supabase) throw new Error("La librería de Supabase no cargó. Revisa tu conexión a internet y recarga la página.");
+
 const { useState, useEffect, useMemo, useRef } = React;
 const {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -1215,8 +1239,18 @@ function Root() {
   return <PanelCMI session={session} onLogout={() => sb.auth.signOut()} />;
 }
 
+document.getElementById("root").dataset.appReady = "1";
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<Root />);
+
+} catch (e) {
+  console.error("Error al iniciar el panel:", e);
+  document.getElementById("root").innerHTML =
+    '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:#0B0B0C;color:#fff;font-family:system-ui,sans-serif">' +
+    '<div><div style="font-size:24px;font-weight:700;color:#FB7185">NO SE PUDO INICIAR EL PANEL</div>' +
+    '<div style="font-size:13px;color:#9A9AA2;margin-top:10px;max-width:440px">' + (e && e.message ? e.message : String(e)) + '</div>' +
+    '<div style="font-size:11px;color:#5A5A62;margin-top:16px">Si el problema persiste, avisa a Claude con este mensaje de error.</div></div></div>';
+}
 </script>
 </body>
 </html>
