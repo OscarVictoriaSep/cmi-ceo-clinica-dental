@@ -617,6 +617,32 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       marginTop: 18
     }
   }, accion));
+  const SelectorRango = ({
+    valor,
+    onChange
+  }) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4
+    }
+  }, [["12M", "12"], ["24M", "24"], ["Todo", "todo"]].map(([label, val]) => /*#__PURE__*/React.createElement("button", {
+    key: val,
+    onClick: () => onChange(val),
+    style: {
+      padding: "4px 10px",
+      fontSize: 11,
+      fontWeight: 500,
+      borderRadius: 6,
+      border: "1px solid var(--line)",
+      background: valor === val ? "var(--bone)" : "transparent",
+      color: valor === val ? "#0B0B0C" : "var(--dim)"
+    }
+  }, label)));
+  const recortarSerie = (serie, rango) => {
+    if (rango === "todo") return serie;
+    const n = rango === "12" ? 12 : 24;
+    return serie.slice(-n);
+  };
   const Boton = ({
     children,
     onClick,
@@ -892,6 +918,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [inversion, setInversion] = useState({});
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
+    const [rangoFacturacion, setRangoFacturacion] = useState("12");
+    const [rangoAtenciones, setRangoAtenciones] = useState("12");
+    const [rangoCasos, setRangoCasos] = useState("12");
+    const [rangoProgramas, setRangoProgramas] = useState("12");
     const [aviso, setAviso] = useState(null);
     const [cargando, setCargando] = useState(false);
     const refAcc = useRef(null),
@@ -1362,11 +1392,20 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       style: {
         padding: "14px 16px 8px"
       }
-    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Facturaci\xF3n mensual"), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Facturaci\xF3n mensual"), /*#__PURE__*/React.createElement(SelectorRango, {
+      valor: rangoFacturacion,
+      onChange: setRangoFacturacion
+    })), /*#__PURE__*/React.createElement(ResponsiveContainer, {
       width: "100%",
       height: 190
     }, /*#__PURE__*/React.createElement(BarChart, {
-      data: serie,
+      data: recortarSerie(serie, rangoFacturacion),
       margin: {
         top: 8,
         right: 4,
@@ -1404,18 +1443,27 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }), /*#__PURE__*/React.createElement(Bar, {
       dataKey: "facturacion",
       radius: [3, 3, 0, 0]
-    }, serie.map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+    }, recortarSerie(serie, rangoFacturacion).map((s, i) => /*#__PURE__*/React.createElement(Cell, {
       key: i,
       fill: s.periodo === periodo ? "#A78BFA" : "#3A3A45"
     })))))), /*#__PURE__*/React.createElement(Panel, {
       style: {
         padding: "14px 16px 8px"
       }
-    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Atenciones e ingreso por atenci\xF3n"), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Atenciones e ingreso por atenci\xF3n"), /*#__PURE__*/React.createElement(SelectorRango, {
+      valor: rangoAtenciones,
+      onChange: setRangoAtenciones
+    })), /*#__PURE__*/React.createElement(ResponsiveContainer, {
       width: "100%",
       height: 190
     }, /*#__PURE__*/React.createElement(LineChart, {
-      data: serie,
+      data: recortarSerie(serie, rangoAtenciones),
       margin: {
         top: 8,
         right: 4,
@@ -1896,7 +1944,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         fontWeight: 600
       }
     }, "100%"))))))), /*#__PURE__*/React.createElement(SecTitle, {
-      color: "var(--mix)"
+      color: "var(--mix)",
+      right: /*#__PURE__*/React.createElement(SelectorRango, {
+        valor: rangoCasos,
+        onChange: setRangoCasos
+      })
     }, "CASOS NUEVOS EN EL TIEMPO"), /*#__PURE__*/React.createElement(Panel, {
       style: {
         padding: "14px 16px 8px"
@@ -1905,7 +1957,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       width: "100%",
       height: 200
     }, /*#__PURE__*/React.createElement(LineChart, {
-      data: serie,
+      data: recortarSerie(serie, rangoCasos),
       margin: {
         top: 8,
         right: 6,
@@ -2149,7 +2201,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       sub: "Todo lo pagado por los referidos de este mes",
       color: "var(--club)"
     })), /*#__PURE__*/React.createElement(SecTitle, {
-      color: "var(--club)"
+      color: "var(--club)",
+      right: /*#__PURE__*/React.createElement(SelectorRango, {
+        valor: rangoProgramas,
+        onChange: setRangoProgramas
+      })
     }, "EVOLUCI\xD3N DE LOS PROGRAMAS"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
@@ -2164,7 +2220,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       width: "100%",
       height: 185
     }, /*#__PURE__*/React.createElement(BarChart, {
-      data: serie,
+      data: recortarSerie(serie, rangoProgramas),
       margin: {
         top: 8,
         right: 4,
@@ -2202,7 +2258,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }), /*#__PURE__*/React.createElement(Bar, {
       dataKey: "club",
       radius: [3, 3, 0, 0]
-    }, serie.map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+    }, recortarSerie(serie, rangoProgramas).map((s, i) => /*#__PURE__*/React.createElement(Cell, {
       key: i,
       fill: s.periodo === periodo ? "#F472B6" : "#3A3A45"
     })))))), /*#__PURE__*/React.createElement(Panel, {
@@ -2213,7 +2269,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       width: "100%",
       height: 185
     }, /*#__PURE__*/React.createElement(BarChart, {
-      data: serie,
+      data: recortarSerie(serie, rangoProgramas),
       margin: {
         top: 8,
         right: 4,
@@ -2249,7 +2305,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }), /*#__PURE__*/React.createElement(Bar, {
       dataKey: "referidos",
       radius: [3, 3, 0, 0]
-    }, serie.map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+    }, recortarSerie(serie, rangoProgramas).map((s, i) => /*#__PURE__*/React.createElement(Cell, {
       key: i,
       fill: s.periodo === periodo ? "#F472B6" : "#3A3A45"
     })))))))), tab === "datos" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
