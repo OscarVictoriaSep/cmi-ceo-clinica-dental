@@ -130,6 +130,26 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     if (u.includes("IMPLANTOLOG")) return "IMPLANTOLOGÍA";
     return s;
   };
+  /* Detecta si una prestación es INICIO de un caso de ortodoncia (instalación de brackets/aparatología/expansores).
+     Se evalúa por nombre de prestación, no por categoría: hasta jun-2026 muchas de estas prestaciones
+     quedaban registradas bajo la categoría "ESPECIALIDAD" (luego renombrada "REHABILITACIÓN ORAL"),
+     por lo que la categoría histórica no es confiable para determinar el mes real de inicio. */
+  const APARATOS_ORTO = ["APARATO DE ORTODONCIA", "APARATO DE SCHWARZ", "APARATO DE SCHWARZ (CLINICO)", "APARATO MC-NAMARA", "APARATO MCNAMARA", "APARATO PENDEX", "APARATO QUAD HELIX", "ARCO PROGENIE"];
+  const esInicioOrtodoncia = prest => {
+    const p = String(prest ?? "").trim().toUpperCase();
+    if (!p) return false;
+    if (p.startsWith("INSTALACION") || p.startsWith("INSTALACIÓN")) {
+      // Nunca confundir con instalaciones de implantología (pilar/corona sobre implante, etc.)
+      if (p.includes("IMPLANTE") || p.includes("PILAR") || p.includes("CORONA")) return false;
+      // Solo cuenta si es explícitamente de ortodoncia (brackets, ortodoncia, tramos Fonasa A-D, distalizador)
+      return p.includes("BRACKET") || p.includes("ORTODON") || p.includes("FONASA") || p.includes("DISTALIZADOR");
+    }
+    if (p.startsWith("DISYUNTOR")) return true;
+    if (p.includes("HYRAX")) return true;
+    if (p.startsWith("EXPANSOR")) return true;
+    if (p.includes("PACK ORTODONCIA")) return true;
+    return APARATOS_ORTO.some(a => p === a || p.startsWith(a));
+  };
   const toNum = v => {
     if (v === null || v === undefined || v === "") return 0;
     if (typeof v === "number") return v;
@@ -275,7 +295,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const primeraImpl = new Map();
     for (const f of acc) {
       const per = f[A_PER];
-      if (f[A_CAT] === "ORTODONCIA" && pidsNuevosConHistorialCompleto.has(f[A_PID])) {
+      if (esInicioOrtodoncia(f[A_PRE]) && pidsNuevosConHistorialCompleto.has(f[A_PID])) {
         const prev = primeraOrto.get(f[A_PID]);
         if (!prev || per < prev) primeraOrto.set(f[A_PID], per);
       }
