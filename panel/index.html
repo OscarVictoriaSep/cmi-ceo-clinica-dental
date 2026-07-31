@@ -258,12 +258,24 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
 
   /* ═══════════════════ CÁLCULO DE INDICADORES ═══════════════════ */
   function construirIndices(acc, pn) {
+    const periodosAcc = acc.map(f => f[A_PER]).filter(Boolean);
+    const minPeriodoAcc = periodosAcc.length ? periodosAcc.reduce((a, b) => a < b ? a : b) : null;
+    const pidCaptacion = new Map();
+    pn.forEach(r => {
+      if (!pidCaptacion.has(r[P_PID])) pidCaptacion.set(r[P_PID], r[P_PER]);
+    });
     const pidsNuevos = new Set(pn.map(r => r[P_PID]));
+    const pidsNuevosConHistorialCompleto = new Set(
+      [...pidsNuevos].filter(pid => {
+        const captacion = pidCaptacion.get(pid);
+        return minPeriodoAcc === null || captacion >= minPeriodoAcc;
+      })
+    );
     const primeraOrto = new Map();
     const primeraImpl = new Map();
     for (const f of acc) {
       const per = f[A_PER];
-      if (f[A_CAT] === "ORTODONCIA" && pidsNuevos.has(f[A_PID])) {
+      if (f[A_CAT] === "ORTODONCIA" && pidsNuevosConHistorialCompleto.has(f[A_PID])) {
         const prev = primeraOrto.get(f[A_PID]);
         if (!prev || per < prev) primeraOrto.set(f[A_PID], per);
       }
