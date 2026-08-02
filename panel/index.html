@@ -216,6 +216,15 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   const P_PER = 0,
     P_PID = 1,
     P_REF = 4;
+  const PG_PER = 0,
+    PG_ID = 1,
+    PG_PID = 2,
+    PG_PRE = 3,
+    PG_REAL = 4,
+    PG_PAGADO = 5,
+    PG_ABONO = 6,
+    PG_MEDIO = 7;
+  const MEDIO_EXCLUIDO = "DESCUENTO SEGURO COMPLEMENTARIO";
   function mapAcciones(rows) {
     const out = new Map();
     let ignoradas = 0;
@@ -271,10 +280,52 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       ignoradas
     };
   }
+  /* Reporte de Facturación/Cobros: usado para el Ingreso Efectivo (caja), distinto de las Acciones Realizadas (devengo) */
+  function mapPagos(rows) {
+    const out = new Map();
+    let ignoradas = 0;
+    for (const r of rows) {
+      const per = pKey(r["Mes de recepción del pago"], r["Año de recepción del pago"]);
+      const pagoId = String(r["# Pago"] ?? "").trim();
+      if (!per || !pagoId) {
+        ignoradas++;
+        continue;
+      }
+      const fila = {
+        periodo: per,
+        pago_id: pagoId,
+        pid: String(r["# Paciente"] ?? "").trim(),
+        prestacion: String(r["Nombre Prestación"] ?? "").trim(),
+        realizado: String(r["Realizado"] ?? "").trim(),
+        pagado_prestacion: toNum(r["Pagado Prestación"]),
+        abono_libre: toNum(r["Abono Libre"]),
+        medio_pago: String(r["Medio de pago"] ?? "").trim()
+      };
+      if (!out.has(per)) out.set(per, []);
+      out.get(per).push(fila);
+    }
+    return {
+      grupos: out,
+      ignoradas
+    };
+  }
 
   /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
   const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || ""];
   const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || ""];
+  const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
+
+  /* Ingreso Efectivo del mes: suma Pagado Prestación + 1 Abono Libre por cada # Pago único, excluyendo Descuento seguro complementario */
+  function calcularIngresoEfectivo(periodo, pagos) {
+    const filas = pagos.filter(p => p[PG_PER] === periodo && p[PG_MEDIO].trim().toUpperCase() !== MEDIO_EXCLUIDO);
+    const sumaPagado = filas.reduce((s, p) => s + (p[PG_PAGADO] || 0), 0);
+    const abonoPorPago = new Map();
+    filas.forEach(p => {
+      if (!abonoPorPago.has(p[PG_ID])) abonoPorPago.set(p[PG_ID], p[PG_ABONO] || 0);
+    });
+    const sumaAbono = [...abonoPorPago.values()].reduce((s, v) => s + v, 0);
+    return sumaPagado + sumaAbono;
+  }
 
   /* ═══════════════════ CÁLCULO DE INDICADORES ═══════════════════ */
   function construirIndices(acc, pn) {
@@ -948,6 +999,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [pn, setPn] = useState([]);
     const [afiliados, setAfiliados] = useState([]);
     const [inversion, setInversion] = useState({});
+    const [pagos, setPagos] = useState([]);
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
     const [rangoFacturacion, setRangoFacturacion] = useState("12");
@@ -958,7 +1010,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [cargando, setCargando] = useState(false);
     const refAcc = useRef(null),
       refPn = useRef(null),
-      refAf = useRef(null);
+      refAf = useRef(null),
+      refPg = useRef(null);
     const notificar = (tipo, texto) => {
       setAviso({
         tipo,
@@ -982,15 +1035,17 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       return todas;
     };
     const cargarTodo = async () => {
-      const [da, dp, df, di] = await Promise.all([
+      const [da, dp, df, di, dpg] = await Promise.all([
         traerTodasLasFilas("cmi_acciones", "*"),
         traerTodasLasFilas("cmi_pacientes_nuevos", "*"),
         traerTodasLasFilas("cmi_afiliados", "rut"),
         traerTodasLasFilas("cmi_inversion", "*"),
+        traerTodasLasFilas("cmi_pagos", "*"),
       ]);
       setAcc((da || []).map(accToArr));
       setPn((dp || []).map(pnToArr));
       setAfiliados((df || []).map(r => r.rut));
+      setPagos((dpg || []).map(pagosToArr));
       const invObj = {};
       (di || []).forEach(r => {
         invObj[r.periodo] = {
@@ -999,7 +1054,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         };
       });
       setInversion(invObj);
-      const disp = [...new Set([...(da || []).map(r => r.periodo), ...(dp || []).map(r => r.periodo)])].sort();
+      const disp = [...new Set([...(da || []).map(r => r.periodo), ...(dp || []).map(r => r.periodo), ...(dpg || []).map(r => r.periodo)])].sort();
       setPeriodo(prev => prev && disp.includes(prev) ? prev : disp.length ? disp[disp.length - 1] : null);
     };
     useEffect(() => {
@@ -1014,6 +1069,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const idx = useMemo(() => construirIndices(acc, pn), [acc, pn]);
     const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx) : null, [periodo, acc, pn, inversion, idx]);
     const V = useMemo(() => periodo ? calcularVentanas(periodo, acc, afiliados) : null, [periodo, acc, afiliados]);
+    const ingresoEfectivo = useMemo(() => periodo ? calcularIngresoEfectivo(periodo, pagos) : 0, [periodo, pagos]);
+    const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx);
       return {
@@ -1025,9 +1082,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         casosOrto: k.casosOrto,
         casosImpl: k.casosImpl,
         club: k.clubTotal,
-        referidos: k.referidos.pacientes
+        referidos: k.referidos.pacientes,
+        ingresoEfectivo: calcularIngresoEfectivo(p, pagos)
       };
-    }), [periodos, acc, pn, inversion, idx]);
+    }), [periodos, acc, pn, inversion, idx, pagos]);
 
     /* — Subir Acciones Realizadas — */
     const subirAcciones = file => {
@@ -1165,9 +1223,58 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         }
       });
     };
+    /* — Subir Pagos / Facturación (Ingreso Efectivo) — */
+    const subirPagos = file => {
+      setCargando(true);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8",
+        complete: async res => {
+          try {
+            const cols = res.meta.fields || [];
+            if (!cols.includes("# Pago") || !cols.includes("Mes de recepción del pago") || !cols.includes("Pagado Prestación")) {
+              notificar("error", "Ese archivo no es de Facturación/Cobros: faltan columnas clave.");
+              setCargando(false);
+              return;
+            }
+            const {
+              grupos,
+              ignoradas
+            } = mapPagos(res.data);
+            if (!grupos.size) {
+              notificar("error", "No se encontraron filas con período válido.");
+              setCargando(false);
+              return;
+            }
+            const periodosSubidos = [...grupos.keys()];
+            for (const per of periodosSubidos) {
+              await sb.from("cmi_pagos").delete().eq("periodo", per);
+            }
+            for (const per of periodosSubidos) {
+              const filas = grupos.get(per);
+              for (let i = 0; i < filas.length; i += 500) {
+                await sb.from("cmi_pagos").insert(filas.slice(i, i + 500));
+              }
+            }
+            await cargarTodo();
+            const pers = periodosSubidos.sort();
+            notificar("ok", `Facturación/Cobros cargados: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}`);
+          } catch (e) {
+            notificar("error", "No se pudo guardar: " + e.message);
+          }
+          setCargando(false);
+        },
+        error: () => {
+          notificar("error", "No se pudo leer el archivo.");
+          setCargando(false);
+        }
+      });
+    };
     const borrarPeriodo = async per => {
       await sb.from("cmi_acciones").delete().eq("periodo", per);
       await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
+      await sb.from("cmi_pagos").delete().eq("periodo", per);
       await cargarTodo();
       notificar("ok", `${pLargo(per)} eliminado.`);
     };
@@ -1384,7 +1491,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, /*#__PURE__*/React.createElement(Metric, {
       label: "Facturaci\xF3n",
       value: clpK(K.facturacion),
-      sub: clp(K.facturacion)
+      sub: `${clp(K.facturacion)} \xB7 devengado (acciones realizadas)`
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ingreso Efectivo del mes",
+      value: periodosPagos.includes(periodo) ? clpK(ingresoEfectivo) : "Sin datos",
+      sub: periodosPagos.includes(periodo) ? `${clp(ingresoEfectivo)} \xB7 caja real (cobros del mes)` : "Carga Facturaci\xF3n/Cobros en la pesta\xF1a Datos"
     }), /*#__PURE__*/React.createElement(Metric, {
       label: "Atenciones totales",
       value: ent(K.atenciones),
@@ -2370,6 +2481,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       fn: subirAfiliados,
       n: afiliados.length,
       u: "socios"
+    }, {
+      t: "Facturación / Cobros",
+      d: "Ingreso Efectivo (caja real del mes). Reemplaza los meses que vengan dentro del archivo. Distinto de Acciones Realizadas, que es devengo.",
+      r: refPg,
+      fn: subirPagos,
+      n: pagos.length,
+      u: "filas"
     }].map(c => /*#__PURE__*/React.createElement(Panel, {
       key: c.t,
       style: {
