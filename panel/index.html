@@ -212,7 +212,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     A_CAT = 7,
     A_TRA = 8,
     A_PZA = 9,
-    A_DOC = 10;
+    A_DOC = 10,
+    A_HON = 11;
   const P_PER = 0,
     P_PID = 1,
     P_REF = 4;
@@ -246,7 +247,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         categoria: normCat(r["Nombre Categoria"]),
         tratamiento: String(r["# Tratamiento"] ?? "").trim(),
         pieza: String(r["Pieza Tratada"] ?? "").trim(),
-        doctor: `${String(r["Nombre Profesional Realizador"] ?? "").trim()} ${String(r["Apellidos Profesional Realizador"] ?? "").trim()}`.trim()
+        doctor: `${String(r["Nombre Profesional Realizador"] ?? "").trim()} ${String(r["Apellidos Profesional Realizador"] ?? "").trim()}`.trim(),
+        honorario: toNum(r["Total a pagar profesional"])
       };
       if (!out.has(per)) out.set(per, []);
       out.get(per).push(fila);
@@ -311,7 +313,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   }
 
   /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
-  const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || ""];
+  const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0];
   const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || ""];
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
 
@@ -375,6 +377,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const accP = acc.filter(f => f[A_PER] === per);
     const pnP = pn.filter(r => r[P_PER] === per);
     const facturacion = accP.reduce((s, f) => s + f[A_PAG], 0);
+    const honorarios = accP.reduce((s, f) => s + (f[A_HON] || 0), 0);
+    const pctHonorarios = facturacion ? honorarios / facturacion : null;
     const atenciones = new Set(accP.map(f => f[A_PID] + "|" + f[A_FEC])).size;
     const pacUnicos = new Set(accP.map(f => f[A_PID])).size;
     const ingAtencion = atenciones ? facturacion / atenciones : 0;
@@ -447,18 +451,27 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const clubTotal = accClub.reduce((s, f) => s + f[A_PAG], 0);
     const clubOtros = clubTotal - clubOrto;
     const docMap = new Map();
+    const honMap = new Map();
     for (const f of accP) {
       if (!f[A_DOC]) continue;
       docMap.set(f[A_DOC], (docMap.get(f[A_DOC]) || 0) + f[A_PAG]);
+      honMap.set(f[A_DOC], (honMap.get(f[A_DOC]) || 0) + (f[A_HON] || 0));
     }
-    const doctores = [...docMap.entries()].map(([doctor, monto]) => ({
-      doctor,
-      monto,
-      pct: facturacion ? monto / facturacion : 0
-    })).sort((a, b) => b.monto - a.monto);
+    const doctores = [...docMap.entries()].map(([doctor, monto]) => {
+      const honorario = honMap.get(doctor) || 0;
+      return {
+        doctor,
+        monto,
+        pct: facturacion ? monto / facturacion : 0,
+        honorario,
+        pctHonorario: monto ? honorario / monto : 0
+      };
+    }).sort((a, b) => b.monto - a.monto);
     return {
       periodo: per,
       facturacion,
+      honorarios,
+      pctHonorarios,
       atenciones,
       pacUnicos,
       ingAtencion,
@@ -1112,6 +1125,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
               return;
             }
             const periodosSubidos = [...grupos.keys()];
+            const sinHonorario = !cols.includes("Total a pagar profesional");
             // Reemplazar por período: borrar y luego insertar
             for (const per of periodosSubidos) {
               await sb.from("cmi_acciones").delete().eq("periodo", per);
@@ -1125,7 +1139,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
             await cargarTodo();
             const pers = periodosSubidos.sort();
             if (!periodo || pers[pers.length - 1] > periodo) setPeriodo(pers[pers.length - 1]);
-            notificar("ok", `Acciones cargadas: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}`);
+            notificar("ok", `Acciones cargadas: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}${sinHonorario ? " Aviso: el archivo no traía la columna 'Total a pagar profesional', el % de honorarios quedará en 0 para estos meses." : ""}`);
           } catch (e) {
             notificar("error", "No se pudo guardar: " + e.message);
           }
@@ -1335,6 +1349,14 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       c: "var(--bone)"
     }];
     const est = (v, m) => v === null || v === undefined || !Number.isFinite(v) ? null : v >= m ? "ok" : "bad";
+    // Semáforo de 3 tramos para % Honorarios: <38% verde (mejor margen), 38%-39% amarillo (en meta), >39% rojo (sobre meta)
+    const estHonorarios = pct => {
+      if (pct === null || pct === undefined || !Number.isFinite(pct)) return null;
+      const p = pct * 100;
+      if (p < 38) return "ok";
+      if (p <= 39) return "warn";
+      return "bad";
+    };
     const tt = {
       background: "#1C1C1F",
       border: "1px solid #2A2A2F",
@@ -1496,6 +1518,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       label: "Ingreso Efectivo del mes",
       value: periodosPagos.includes(periodo) ? clpK(ingresoEfectivo) : "Sin datos",
       sub: periodosPagos.includes(periodo) ? `${clp(ingresoEfectivo)} \xB7 caja real (cobros del mes)` : "Carga Facturaci\xF3n/Cobros en la pesta\xF1a Datos"
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "% Honorarios / Facturaci\xF3n",
+      value: pct(K.pctHonorarios),
+      sub: `${clp(K.honorarios)} pagados a doctores \xB7 meta ~38%`,
+      estado: estHonorarios(K.pctHonorarios)
     }), /*#__PURE__*/React.createElement(Metric, {
       label: "Atenciones totales",
       value: ent(K.atenciones),
@@ -1686,7 +1713,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, "Facturaci\xF3n"), /*#__PURE__*/React.createElement("th", {
       className: "num"
-    }, "% del mes"))), /*#__PURE__*/React.createElement("tbody", null, K.doctores.map(d => /*#__PURE__*/React.createElement("tr", {
+    }, "% del mes"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Honorarios"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "% Honorario"))), /*#__PURE__*/React.createElement("tbody", null, K.doctores.map(d => /*#__PURE__*/React.createElement("tr", {
       key: d.doctor
     }, /*#__PURE__*/React.createElement("td", {
       style: {
@@ -1699,7 +1730,37 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       style: {
         color: "var(--dim)"
       }
-    }, pct(d.pct)))))))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    }, pct(d.pct)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(d.honorario)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, pct(d.pctHonorario)))), /*#__PURE__*/React.createElement("tr", {
+      style: {
+        borderTop: "1px solid var(--line)",
+        fontWeight: 600
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--bone)"
+      }
+    }, "Total"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.facturacion)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, "100%"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.honorarios)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: estHonorarios(K.pctHonorarios) === "ok" ? "var(--ok)" : estHonorarios(K.pctHonorarios) === "warn" ? "var(--warn)" : estHonorarios(K.pctHonorarios) === "bad" ? "var(--bad)" : "var(--dim)"
+      }
+    }, pct(K.pctHonorarios))))))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--meta)",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
