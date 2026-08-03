@@ -378,6 +378,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const pnP = pn.filter(r => r[P_PER] === per);
     const facturacion = accP.reduce((s, f) => s + f[A_PAG], 0);
     const honorarios = accP.reduce((s, f) => s + (f[A_HON] || 0), 0);
+    const facturacionLabs = accP.reduce((s, f) => s + (String(f[A_CAT] || "").trim().toUpperCase() === "LABORATORIOS" ? f[A_PAG] : 0), 0);
+    const facturacionProductos = accP.reduce((s, f) => s + (String(f[A_CAT] || "").trim().toUpperCase() === "PRODUCTOS VENTAS" ? f[A_PAG] : 0), 0);
+    const facturacionClinica = facturacion - facturacionLabs - facturacionProductos;
     const pctHonorarios = facturacion ? honorarios / facturacion : null;
     const atenciones = new Set(accP.map(f => f[A_PID] + "|" + f[A_FEC])).size;
     const pacUnicos = new Set(accP.map(f => f[A_PID])).size;
@@ -452,19 +455,37 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const clubOtros = clubTotal - clubOrto;
     const docMap = new Map();
     const honMap = new Map();
+    const docClinMap = new Map();
+    const docLabsMap = new Map();
+    const docProdMap = new Map();
+    const CATS_SIN_COMISION = ["LABORATORIOS", "PRODUCTOS VENTAS"];
     for (const f of accP) {
       if (!f[A_DOC]) continue;
       docMap.set(f[A_DOC], (docMap.get(f[A_DOC]) || 0) + f[A_PAG]);
-      honMap.set(f[A_DOC], (honMap.get(f[A_DOC]) || 0) + (f[A_HON] || 0));
+      const catU = String(f[A_CAT] || "").trim().toUpperCase();
+      if (catU === "LABORATORIOS") {
+        docLabsMap.set(f[A_DOC], (docLabsMap.get(f[A_DOC]) || 0) + f[A_PAG]);
+      } else if (catU === "PRODUCTOS VENTAS") {
+        docProdMap.set(f[A_DOC], (docProdMap.get(f[A_DOC]) || 0) + f[A_PAG]);
+      } else {
+        docClinMap.set(f[A_DOC], (docClinMap.get(f[A_DOC]) || 0) + f[A_PAG]);
+        honMap.set(f[A_DOC], (honMap.get(f[A_DOC]) || 0) + (f[A_HON] || 0));
+      }
     }
     const doctores = [...docMap.entries()].map(([doctor, monto]) => {
       const honorario = honMap.get(doctor) || 0;
+      const montoClinica = docClinMap.get(doctor) || 0;
+      const montoLabs = docLabsMap.get(doctor) || 0;
+      const montoProductos = docProdMap.get(doctor) || 0;
       return {
         doctor,
         monto,
         pct: facturacion ? monto / facturacion : 0,
+        montoClinica,
+        montoLabs,
+        montoProductos,
         honorario,
-        pctHonorario: monto ? honorario / monto : 0
+        pctHonorario: montoClinica ? honorario / montoClinica : 0
       };
     }).sort((a, b) => b.monto - a.monto);
     return {
@@ -472,6 +493,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       facturacion,
       honorarios,
       pctHonorarios,
+      facturacionClinica,
+      facturacionLabs,
+      facturacionProductos,
       atenciones,
       pacUnicos,
       ingAtencion,
@@ -1357,6 +1381,15 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       if (p <= 39) return "warn";
       return "bad";
     };
+    // Semáforo de 3 tramos para % Honorario / Facturación CLÍNICA: <50% verde, 50%-52% amarillo, >52% rojo
+    // (mide si se respeta la estructura de comisiones ~35% generales / ~50-55% especialistas, no un objetivo a bajar)
+    const estHonorarioClinica = pct => {
+      if (pct === null || pct === undefined || !Number.isFinite(pct)) return null;
+      const p = pct * 100;
+      if (p < 50) return "ok";
+      if (p <= 52) return "warn";
+      return "bad";
+    };
     const tt = {
       background: "#1C1C1F",
       border: "1px solid #2A2A2F",
@@ -1715,6 +1748,12 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, "% del mes"), /*#__PURE__*/React.createElement("th", {
       className: "num"
+    }, "Fact. Cl\xEDnica"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Fact. Laboratorios"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Fact. Productos"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
     }, "Honorarios"), /*#__PURE__*/React.createElement("th", {
       className: "num"
     }, "% Honorario"))), /*#__PURE__*/React.createElement("tbody", null, K.doctores.map(d => /*#__PURE__*/React.createElement("tr", {
@@ -1731,6 +1770,18 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         color: "var(--dim)"
       }
     }, pct(d.pct)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(d.montoClinica)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(d.montoLabs)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(d.montoProductos)), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, clp(d.honorario)), /*#__PURE__*/React.createElement("td", {
       className: "num",
@@ -1755,12 +1806,28 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       }
     }, "100%"), /*#__PURE__*/React.createElement("td", {
       className: "num"
+    }, clp(K.facturacionClinica)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(K.facturacionLabs)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(K.facturacionProductos)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
     }, clp(K.honorarios)), /*#__PURE__*/React.createElement("td", {
       className: "num",
       style: {
-        color: estHonorarios(K.pctHonorarios) === "ok" ? "var(--ok)" : estHonorarios(K.pctHonorarios) === "warn" ? "var(--warn)" : estHonorarios(K.pctHonorarios) === "bad" ? "var(--bad)" : "var(--dim)"
+        color: (() => {
+          const ph = K.facturacionClinica ? K.honorarios / K.facturacionClinica : null;
+          const e = estHonorarioClinica(ph);
+          return e === "ok" ? "var(--ok)" : e === "warn" ? "var(--warn)" : e === "bad" ? "var(--bad)" : "var(--dim)";
+        })()
       }
-    }, pct(K.pctHonorarios))))))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    }, pct(K.facturacionClinica ? K.honorarios / K.facturacionClinica : null))))))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--meta)",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
