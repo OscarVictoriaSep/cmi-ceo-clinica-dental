@@ -1040,9 +1040,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
     const [rangoFacturacion, setRangoFacturacion] = useState("12");
+    const [rangoIngresoEfectivo, setRangoIngresoEfectivo] = useState("12");
     const [rangoAtenciones, setRangoAtenciones] = useState("12");
     const [rangoCasos, setRangoCasos] = useState("12");
     const [rangoProgramas, setRangoProgramas] = useState("12");
+    const [rangoInversion, setRangoInversion] = useState("12");
     const [aviso, setAviso] = useState(null);
     const [cargando, setCargando] = useState(false);
     const refAcc = useRef(null),
@@ -1110,6 +1112,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx);
+      const iv = inversion[p] || {
+        meta: 0,
+        google: 0
+      };
       return {
         periodo: p,
         label: pLabel(p),
@@ -1120,7 +1126,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         casosImpl: k.casosImpl,
         club: k.clubTotal,
         referidos: k.referidos.pacientes,
-        ingresoEfectivo: calcularIngresoEfectivo(p, pagos)
+        ingresoEfectivo: calcularIngresoEfectivo(p, pagos),
+        invMeta: Number(iv.meta) || 0,
+        invGoogle: Number(iv.google) || 0,
+        invTotal: (Number(iv.meta) || 0) + (Number(iv.google) || 0)
       };
     }), [periodos, acc, pn, inversion, idx, pagos]);
 
@@ -1642,6 +1651,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       contentStyle: tt,
       labelStyle: {
         color: "#E3E3E3"
+      },
+      itemStyle: {
+        color: "#E3E3E3"
       }
     }), /*#__PURE__*/React.createElement(Bar, {
       dataKey: "facturacion",
@@ -1649,6 +1661,67 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, recortarSerie(serie, rangoFacturacion).map((s, i) => /*#__PURE__*/React.createElement(Cell, {
       key: i,
       fill: s.periodo === periodo ? "#A78BFA" : "#3A3A45"
+    })))))), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement(Eyebrow, null, "Ingreso Efectivo mensual"), /*#__PURE__*/React.createElement(SelectorRango, {
+      valor: rangoIngresoEfectivo,
+      onChange: setRangoIngresoEfectivo
+    })), /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 190
+    }, /*#__PURE__*/React.createElement(BarChart, {
+      data: recortarSerie(serie, rangoIngresoEfectivo),
+      margin: {
+        top: 8,
+        right: 4,
+        left: -14,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false,
+      tickFormatter: v => (v / 1e6).toFixed(0) + "M"
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      formatter: v => clp(v),
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      },
+      itemStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Bar, {
+      dataKey: "ingresoEfectivo",
+      radius: [3, 3, 0, 0]
+    }, recortarSerie(serie, rangoIngresoEfectivo).map((s, i) => /*#__PURE__*/React.createElement(Cell, {
+      key: i,
+      fill: s.periodo === periodo ? "#34D399" : "#3A3A45"
     })))))), /*#__PURE__*/React.createElement(Panel, {
       style: {
         padding: "14px 16px 8px"
@@ -1708,6 +1781,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }), /*#__PURE__*/React.createElement(Tooltip, {
       contentStyle: tt,
       labelStyle: {
+        color: "#E3E3E3"
+      },
+      itemStyle: {
         color: "#E3E3E3"
       }
     }), /*#__PURE__*/React.createElement(Legend, {
@@ -2082,7 +2158,87 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, "\u2014"), /*#__PURE__*/React.createElement("td", {
       className: "num"
-    }, "\u2014"))))))), tab === "mix" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    }, "\u2014")))))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--meta)",
+      right: /*#__PURE__*/React.createElement(SelectorRango, {
+        valor: rangoInversion,
+        onChange: setRangoInversion
+      })
+    }, "INVERSI\xD3N PUBLICITARIA EN EL TIEMPO"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "14px 16px 8px"
+      }
+    }, /*#__PURE__*/React.createElement(ResponsiveContainer, {
+      width: "100%",
+      height: 200
+    }, /*#__PURE__*/React.createElement(LineChart, {
+      data: recortarSerie(serie, rangoInversion),
+      margin: {
+        top: 8,
+        right: 6,
+        left: -16,
+        bottom: 0
+      }
+    }, /*#__PURE__*/React.createElement(CartesianGrid, {
+      strokeDasharray: "2 4",
+      stroke: "#26262A",
+      vertical: false
+    }), /*#__PURE__*/React.createElement(XAxis, {
+      dataKey: "label",
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: {
+        stroke: "#2A2A2F"
+      },
+      tickLine: false
+    }), /*#__PURE__*/React.createElement(YAxis, {
+      tick: {
+        fill: "#9A9AA2",
+        fontSize: 10
+      },
+      axisLine: false,
+      tickLine: false,
+      tickFormatter: v => (v / 1e6).toFixed(1) + "M"
+    }), /*#__PURE__*/React.createElement(Tooltip, {
+      formatter: v => clp(v),
+      contentStyle: tt,
+      labelStyle: {
+        color: "#E3E3E3"
+      },
+      itemStyle: {
+        color: "#E3E3E3"
+      }
+    }), /*#__PURE__*/React.createElement(Legend, {
+      wrapperStyle: {
+        fontSize: 11
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      name: "Total Publicidad",
+      dataKey: "invTotal",
+      stroke: "#A78BFA",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      name: "Meta Ads",
+      dataKey: "invMeta",
+      stroke: "var(--meta)",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }), /*#__PURE__*/React.createElement(Line, {
+      name: "Google Ads",
+      dataKey: "invGoogle",
+      stroke: "var(--goog)",
+      strokeWidth: 2,
+      dot: {
+        r: 2.5
+      }
+    }))))), tab === "mix" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--mix)",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -2170,7 +2326,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       tickLine: false
     }), /*#__PURE__*/React.createElement(Tooltip, {
       formatter: v => clp(v),
-      contentStyle: tt
+      contentStyle: tt,
+      itemStyle: {
+        color: "#E3E3E3"
+      },
+      labelStyle: {
+        color: "#E3E3E3"
+      }
     }), /*#__PURE__*/React.createElement(Bar, {
       dataKey: "monto",
       fill: "#FB923C",
@@ -2259,6 +2421,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }), /*#__PURE__*/React.createElement(Tooltip, {
       contentStyle: tt,
       labelStyle: {
+        color: "#E3E3E3"
+      },
+      itemStyle: {
         color: "#E3E3E3"
       }
     }), /*#__PURE__*/React.createElement(Legend, {
@@ -2525,6 +2690,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       contentStyle: tt,
       labelStyle: {
         color: "#E3E3E3"
+      },
+      itemStyle: {
+        color: "#E3E3E3"
       }
     }), /*#__PURE__*/React.createElement(Bar, {
       dataKey: "club",
@@ -2571,6 +2739,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }), /*#__PURE__*/React.createElement(Tooltip, {
       contentStyle: tt,
       labelStyle: {
+        color: "#E3E3E3"
+      },
+      itemStyle: {
         color: "#E3E3E3"
       }
     }), /*#__PURE__*/React.createElement(Bar, {
