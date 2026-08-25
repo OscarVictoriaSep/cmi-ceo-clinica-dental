@@ -319,10 +319,66 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     };
   }
 
+  /* El reporte de Inventario de Dentalink usa "." solo como separador de miles (nunca decimal): "3.500" = 3500 */
+  const toNumCLP = v => {
+    if (v === null || v === undefined || v === "") return 0;
+    const s = String(v).trim().replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const DESTINO_MERMA = "MERMA";
+  /* Inventario / Insumos: identifica consumo real (Bodega central + Salida, excluyendo Merma) vs. merma (vencimientos/descuadres) */
+  function mapInsumos(rows) {
+    const out = new Map();
+    let ignoradas = 0;
+    for (const r of rows) {
+      const per = pKey(r["Mes de transacción"], r["Año de transacción"]);
+      if (!per) {
+        ignoradas++;
+        continue;
+      }
+      const fila = {
+        periodo: per,
+        bodega: String(r["Bodega"] ?? "").trim(),
+        tipo_movimiento: String(r["Tipo de movimiento"] ?? "").trim(),
+        destino: String(r["Destino"] ?? "").trim(),
+        producto: String(r["Nombre producto"] ?? "").trim(),
+        precio_producto: toNumCLP(r["Precio Producto"])
+      };
+      if (!out.has(per)) out.set(per, []);
+      out.get(per).push(fila);
+    }
+    return {
+      grupos: out,
+      ignoradas
+    };
+  }
+
   /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
   const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0];
   const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || ""];
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
+  const IN_PER = 0,
+    IN_BOD = 1,
+    IN_TIPO = 2,
+    IN_DEST = 3,
+    IN_PROD = 4,
+    IN_PRECIO = 5;
+  const insumosToArr = r => [r.periodo, r.bodega || "", r.tipo_movimiento || "", r.destino || "", r.producto || "", Number(r.precio_producto) || 0];
+
+  /* Costo de Insumos utilizados y Merma del mes: Bodega central + Salida; Merma se separa por Destino */
+  function calcularInsumos(periodo, insumos) {
+    const filas = insumos.filter(f => f[IN_PER] === periodo && f[IN_BOD] === "Bodega central" && f[IN_TIPO] === "Salida");
+    let costoInsumos = 0,
+      merma = 0;
+    filas.forEach(f => {
+      if (String(f[IN_DEST] || "").trim().toUpperCase() === DESTINO_MERMA) merma += f[IN_PRECIO];else costoInsumos += f[IN_PRECIO];
+    });
+    return {
+      costoInsumos,
+      merma
+    };
+  }
 
   /* Ingreso Efectivo del mes: suma Pagado Prestación + 1 Abono Libre por cada # Pago único, excluyendo Descuento seguro complementario */
   function calcularIngresoEfectivo(periodo, pagos) {
@@ -1049,6 +1105,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [afiliados, setAfiliados] = useState([]);
     const [inversion, setInversion] = useState({});
     const [pagos, setPagos] = useState([]);
+    const [insumos, setInsumos] = useState([]);
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
     useEffect(() => {
@@ -1065,7 +1122,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const refAcc = useRef(null),
       refPn = useRef(null),
       refAf = useRef(null),
-      refPg = useRef(null);
+      refPg = useRef(null),
+      refIn = useRef(null);
     const notificar = (tipo, texto) => {
       setAviso({
         tipo,
@@ -1089,22 +1147,26 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       return todas;
     };
     const cargarTodo = async () => {
-      const [da, dp, df, di, dpg] = await Promise.all([
+      const [da, dp, df, di, dpg, dins] = await Promise.all([
         traerTodasLasFilas("cmi_acciones", "*"),
         traerTodasLasFilas("cmi_pacientes_nuevos", "*"),
         traerTodasLasFilas("cmi_afiliados", "rut"),
         traerTodasLasFilas("cmi_inversion", "*"),
         traerTodasLasFilas("cmi_pagos", "*"),
+        traerTodasLasFilas("cmi_insumos", "*"),
       ]);
       setAcc((da || []).map(accToArr));
       setPn((dp || []).map(pnToArr));
       setAfiliados((df || []).map(r => r.rut));
       setPagos((dpg || []).map(pagosToArr));
+      setInsumos((dins || []).map(insumosToArr));
       const invObj = {};
       (di || []).forEach(r => {
         invObj[r.periodo] = {
           meta: Number(r.meta) || 0,
-          google: Number(r.google) || 0
+          google: Number(r.google) || 0,
+          laboratorios: Number(r.laboratorios) || 0,
+          mantenciones: Number(r.mantenciones) || 0
         };
       });
       setInversion(invObj);
@@ -1131,6 +1193,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const pctMargenLab = K?.facturacionLabs ? gananciaLab / K.facturacionLabs : null;
     const mantenciones = Number(ivPeriodo.mantenciones) || 0;
     const pctMantenciones = K?.facturacion ? mantenciones / K.facturacion : null;
+    const insumosCalc = useMemo(() => periodo ? calcularInsumos(periodo, insumos) : {
+      costoInsumos: 0,
+      merma: 0
+    }, [periodo, insumos]);
+    const pctInsumos = K?.facturacion ? insumosCalc.costoInsumos / K.facturacion : null;
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx);
@@ -1340,10 +1407,61 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         }
       });
     };
+    /* — Subir Inventario / Insumos — archivo TSV codificado en UTF-16 (exportación directa de Dentalink, con extensión .xls) — */
+    const subirInsumos = file => {
+      setCargando(true);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-16LE",
+        delimiter: "\t",
+        quoteChar: '"',
+        complete: async res => {
+          try {
+            const cols = res.meta.fields || [];
+            if (!cols.includes("Bodega") || !cols.includes("Tipo de movimiento") || !cols.includes("Destino") || !cols.includes("Precio Producto")) {
+              notificar("error", "Ese archivo no es de Inventario/Insumos: faltan columnas clave.");
+              setCargando(false);
+              return;
+            }
+            const {
+              grupos,
+              ignoradas
+            } = mapInsumos(res.data);
+            if (!grupos.size) {
+              notificar("error", "No se encontraron filas con período válido.");
+              setCargando(false);
+              return;
+            }
+            const periodosSubidos = [...grupos.keys()];
+            for (const per of periodosSubidos) {
+              await sb.from("cmi_insumos").delete().eq("periodo", per);
+            }
+            for (const per of periodosSubidos) {
+              const filas = grupos.get(per);
+              for (let i = 0; i < filas.length; i += 500) {
+                await sb.from("cmi_insumos").insert(filas.slice(i, i + 500));
+              }
+            }
+            await cargarTodo();
+            const pers = periodosSubidos.sort();
+            notificar("ok", `Inventario cargado: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}`);
+          } catch (e) {
+            notificar("error", "No se pudo guardar: " + e.message);
+          }
+          setCargando(false);
+        },
+        error: () => {
+          notificar("error", "No se pudo leer el archivo. Verifica que sea el export de Inventario de Dentalink sin modificar.");
+          setCargando(false);
+        }
+      });
+    };
     const borrarPeriodo = async per => {
       await sb.from("cmi_acciones").delete().eq("periodo", per);
       await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
       await sb.from("cmi_pagos").delete().eq("periodo", per);
+      await sb.from("cmi_insumos").delete().eq("periodo", per);
       await cargarTodo();
       notificar("ok", `${pLargo(per)} eliminado.`);
     };
@@ -2841,6 +2959,28 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       }
     }, pct(K.facturacionClinica ? K.honorarios / K.facturacionClinica : null)))))))), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--gestion)"
+    }, "INSUMOS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Costo de Insumos utilizados",
+      value: clpK(insumosCalc.costoInsumos),
+      sub: clp(insumosCalc.costoInsumos)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "% Insumos / Facturaci\xF3n",
+      value: pct(pctInsumos, 2),
+      sub: "l\xEDmite 4,14%",
+      estado: estMax(pctInsumos, 0.0414)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Merma del mes",
+      value: clpK(insumosCalc.merma),
+      sub: `${clp(insumosCalc.merma)} \xB7 vencimientos o descuadres, no afecta el % anterior`
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
     }, "LABORATORIOS"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
@@ -2917,6 +3057,14 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       fn: subirPagos,
       n: pagos.length,
       u: "filas"
+    }, {
+      t: "Inventario / Insumos",
+      d: "Costo de Insumos y Merma. Export directo de Dentalink (archivo .xls, no lo abras ni resguardes en Excel antes de subirlo). Reemplaza los meses que traiga el archivo.",
+      r: refIn,
+      fn: subirInsumos,
+      n: insumos.length,
+      u: "filas",
+      accept: ".xls,.csv,.tsv,.txt"
     }].map(c => /*#__PURE__*/React.createElement(Panel, {
       key: c.t,
       style: {
@@ -2957,10 +3105,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       chico: true,
       disabled: cargando,
       onClick: () => c.r.current?.click()
-    }, cargando ? "Procesando…" : "Elegir CSV")), /*#__PURE__*/React.createElement("input", {
+    }, cargando ? "Procesando…" : "Elegir archivo")), /*#__PURE__*/React.createElement("input", {
       ref: c.r,
       type: "file",
-      accept: ".csv,text/csv",
+      accept: c.accept || ".csv,text/csv",
       style: {
         display: "none"
       },
