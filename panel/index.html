@@ -1124,6 +1124,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx) : null, [periodo, acc, pn, inversion, idx]);
     const V = useMemo(() => periodo ? calcularVentanas(periodo, acc, afiliados) : null, [periodo, acc, afiliados]);
     const ingresoEfectivo = useMemo(() => periodo ? calcularIngresoEfectivo(periodo, pagos) : 0, [periodo, pagos]);
+    const ivPeriodo = inversion[periodo] || {};
+    const facturasLab = Number(ivPeriodo.laboratorios) || 0;
+    const gananciaLab = (K?.facturacionLabs || 0) - facturasLab;
+    const pctLabFacturacion = K?.facturacion ? facturasLab / K.facturacion : null;
+    const pctMargenLab = K?.facturacionLabs ? gananciaLab / K.facturacionLabs : null;
+    const mantenciones = Number(ivPeriodo.mantenciones) || 0;
+    const pctMantenciones = K?.facturacion ? mantenciones / K.facturacion : null;
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx);
@@ -1343,7 +1350,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const guardarInversion = async (per, campo, valor) => {
       const actual = inversion[per] || {
         meta: 0,
-        google: 0
+        google: 0,
+        laboratorios: 0,
+        mantenciones: 0
       };
       const nuevaFila = {
         ...actual,
@@ -1356,8 +1365,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       setInversion(nueva);
       await sb.from("cmi_inversion").upsert({
         periodo: per,
-        meta: nuevaFila.meta,
-        google: nuevaFila.google
+        ...nuevaFila
       });
     };
     if (!listo) return /*#__PURE__*/React.createElement("div", {
@@ -1418,6 +1426,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       if (p <= 52) return "warn";
       return "bad";
     };
+    // Semáforo simple para % que son l\xEDmites de costo (menos es mejor): ok si est\xE1 dentro del l\xEDmite, bad si lo supera
+    const estMax = (v, m) => v === null || v === undefined || !Number.isFinite(v) ? null : v <= m ? "ok" : "bad";
     const tt = {
       background: "#1C1C1F",
       border: "1px solid #2A2A2F",
@@ -2829,7 +2839,48 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
           return e === "ok" ? "var(--ok)" : e === "warn" ? "var(--warn)" : e === "bad" ? "var(--bad)" : "var(--dim)";
         })()
       }
-    }, pct(K.facturacionClinica ? K.honorarios / K.facturacionClinica : null))))))))), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    }, pct(K.facturacionClinica ? K.honorarios / K.facturacionClinica : null)))))))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
+    }, "LABORATORIOS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "% Laboratorios / Facturaci\xF3n",
+      value: pct(pctLabFacturacion),
+      sub: `${clp(facturasLab)} en facturas \xB7 l\xEDmite 10%`,
+      estado: estMax(pctLabFacturacion, 0.10)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ganancia Laboratorios",
+      value: clpK(gananciaLab),
+      sub: `${clp(K.facturacionLabs || 0)} ingreso \u2212 ${clp(facturasLab)} costo`
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "% Margen Laboratorios",
+      value: pct(pctMargenLab),
+      sub: "sobre ingreso por prestaciones de laboratorio \xB7 meta 30%",
+      estado: est(pctMargenLab, 0.30)
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
+    }, "MANTENCIONES"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Mantenciones y Reparaciones",
+      value: clpK(mantenciones),
+      sub: clp(mantenciones)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "% Mantenciones / Facturaci\xF3n",
+      value: pct(pctMantenciones, 2),
+      sub: "l\xEDmite 0,68%",
+      estado: estMax(pctMantenciones, 0.0068)
+    }))), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--bone)"
     }, "CARGAR ARCHIVOS"), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3029,7 +3080,50 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       })), /*#__PURE__*/React.createElement("td", {
         className: "num"
       }, clp((iv.meta || 0) + (iv.google || 0))));
-    })))))), /*#__PURE__*/React.createElement(Panel, {
+    })))))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--bone)"
+    }, "LABORATORIOS Y MANTENCIONES"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden",
+        marginBottom: 28
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Per\xEDodo"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        minWidth: 150
+      }
+    }, "Facturas Laboratorio"), /*#__PURE__*/React.createElement("th", {
+      style: {
+        minWidth: 150
+      }
+    }, "Mantenciones y Reparaciones"))), /*#__PURE__*/React.createElement("tbody", null, [...periodos].reverse().map(p => {
+      const iv = inversion[p] || {};
+      return /*#__PURE__*/React.createElement("tr", {
+        key: p
+      }, /*#__PURE__*/React.createElement("td", {
+        style: {
+          color: "var(--bone)",
+          whiteSpace: "nowrap"
+        }
+      }, pLargo(p)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        inputMode: "numeric",
+        className: "mono",
+        placeholder: "0",
+        value: iv.laboratorios || "",
+        onChange: e => guardarInversion(p, "laboratorios", e.target.value)
+      })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        inputMode: "numeric",
+        className: "mono",
+        placeholder: "0",
+        value: iv.mantenciones || "",
+        onChange: e => guardarInversion(p, "mantenciones", e.target.value)
+      })));
+    }))))), /*#__PURE__*/React.createElement(Panel, {
       style: {
         padding: "16px 18px"
       }
