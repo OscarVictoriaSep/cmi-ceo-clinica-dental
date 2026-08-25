@@ -7,6 +7,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/react-is@18/umd/react-is.production.min.js"></script>
 <script src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
 <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
@@ -377,6 +378,53 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     return {
       costoInsumos,
       merma
+    };
+  }
+
+  /* Catálogo de Costos de Productos de Venta, con vigencia por mes: cada carga es una foto completa del catálogo,
+     etiquetada con el mes desde el cual rige. Para un mes dado, se usa la versión MÁS RECIENTE cuya vigencia sea
+     igual o anterior a ese mes — así los meses ya cerrados nunca cambian con una actualización de costos futura. */
+  const normProducto = s => String(s ?? "").trim().toUpperCase();
+  const CP_VIG = 0,
+    CP_PROD = 1,
+    CP_COSTO = 2,
+    CP_PVENTA = 3;
+  const costosProductosToArr = r => [r.vigencia_desde, r.producto || "", Number(r.costo_compra) || 0, Number(r.precio_venta) || 0];
+  function catalogoVigente(periodo, costosProductos) {
+    const vigencias = [...new Set(costosProductos.map(c => c[CP_VIG]))].filter(v => v <= periodo).sort();
+    const mapa = new Map();
+    if (!vigencias.length) return mapa;
+    const activa = vigencias[vigencias.length - 1];
+    costosProductos.filter(c => c[CP_VIG] === activa).forEach(c => {
+      mapa.set(normProducto(c[CP_PROD]), c[CP_COSTO]);
+    });
+    return mapa;
+  }
+  /* Ingresos por Venta de Productos ya viene de calcularPeriodo (facturacionProductosVenta); aquí se cruza con el catálogo de costos */
+  function calcularProductosVenta(periodo, acc, costosProductos) {
+    const mapa = catalogoVigente(periodo, costosProductos);
+    const filas = acc.filter(f => f[A_PER] === periodo && String(f[A_CAT] || "").trim().toUpperCase() === "PRODUCTOS VENTAS" && !esRadiografia(f[A_PRE]));
+    let ingresos = 0,
+      costo = 0;
+    const sinCosto = new Map();
+    filas.forEach(f => {
+      ingresos += f[A_PAG];
+      const c = mapa.get(normProducto(f[A_PRE]));
+      if (c === undefined) {
+        sinCosto.set(f[A_PRE], (sinCosto.get(f[A_PRE]) || 0) + f[A_PAG]);
+      } else {
+        costo += c;
+      }
+    });
+    const ganancia = ingresos - costo;
+    const margen = ingresos ? ganancia / ingresos : null;
+    return {
+      ingresos,
+      costo,
+      ganancia,
+      margen,
+      sinCosto: [...sinCosto.entries()],
+      tieneCatalogo: mapa.size > 0
     };
   }
 
@@ -1106,6 +1154,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [inversion, setInversion] = useState({});
     const [pagos, setPagos] = useState([]);
     const [insumos, setInsumos] = useState([]);
+    const [costosProductos, setCostosProductos] = useState([]);
+    const [vigenciaSubida, setVigenciaSubida] = useState("");
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
     useEffect(() => {
@@ -1123,7 +1173,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       refPn = useRef(null),
       refAf = useRef(null),
       refPg = useRef(null),
-      refIn = useRef(null);
+      refIn = useRef(null),
+      refCp = useRef(null);
     const notificar = (tipo, texto) => {
       setAviso({
         tipo,
@@ -1147,19 +1198,21 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       return todas;
     };
     const cargarTodo = async () => {
-      const [da, dp, df, di, dpg, dins] = await Promise.all([
+      const [da, dp, df, di, dpg, dins, dcp] = await Promise.all([
         traerTodasLasFilas("cmi_acciones", "*"),
         traerTodasLasFilas("cmi_pacientes_nuevos", "*"),
         traerTodasLasFilas("cmi_afiliados", "rut"),
         traerTodasLasFilas("cmi_inversion", "*"),
         traerTodasLasFilas("cmi_pagos", "*"),
         traerTodasLasFilas("cmi_insumos", "*"),
+        traerTodasLasFilas("cmi_costos_productos", "*"),
       ]);
       setAcc((da || []).map(accToArr));
       setPn((dp || []).map(pnToArr));
       setAfiliados((df || []).map(r => r.rut));
       setPagos((dpg || []).map(pagosToArr));
       setInsumos((dins || []).map(insumosToArr));
+      setCostosProductos((dcp || []).map(costosProductosToArr));
       const invObj = {};
       (di || []).forEach(r => {
         invObj[r.periodo] = {
@@ -1198,6 +1251,14 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       merma: 0
     }, [periodo, insumos]);
     const pctInsumos = K?.facturacion ? insumosCalc.costoInsumos / K.facturacion : null;
+    const productosVentaCalc = useMemo(() => periodo ? calcularProductosVenta(periodo, acc, costosProductos) : {
+      ingresos: 0,
+      costo: 0,
+      ganancia: 0,
+      margen: null,
+      sinCosto: [],
+      tieneCatalogo: false
+    }, [periodo, acc, costosProductos]);
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx);
@@ -1456,6 +1517,50 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
           setCargando(false);
         }
       });
+    };
+    /* — Subir Catálogo de Costos de Productos de Venta (.xlsx, con vigencia elegida por el usuario) — */
+    const subirCostosProductos = async file => {
+      if (!vigenciaSubida) {
+        notificar("error", "Elige primero desde qué mes rige este catálogo (vigencia).");
+        return;
+      }
+      setCargando(true);
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, {
+          type: "array"
+        });
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        const filas = XLSX.utils.sheet_to_json(hoja, {
+          defval: ""
+        });
+        const cols = filas.length ? Object.keys(filas[0]) : [];
+        if (!cols.includes("Nombre") || !cols.includes("Costo de Compra")) {
+          notificar("error", "Ese archivo no es de Costos de Productos: faltan columnas clave (Nombre, Costo de Compra).");
+          setCargando(false);
+          return;
+        }
+        const filasValidas = filas.filter(r => String(r["Nombre"] ?? "").trim()).map(r => ({
+          vigencia_desde: vigenciaSubida,
+          producto: String(r["Nombre"]).trim(),
+          costo_compra: toNum(r["Costo de Compra"]),
+          precio_venta: toNum(r["Precio de Venta"])
+        }));
+        if (!filasValidas.length) {
+          notificar("error", "No se encontraron productos válidos en el archivo.");
+          setCargando(false);
+          return;
+        }
+        await sb.from("cmi_costos_productos").delete().eq("vigencia_desde", vigenciaSubida);
+        for (let i = 0; i < filasValidas.length; i += 500) {
+          await sb.from("cmi_costos_productos").insert(filasValidas.slice(i, i + 500));
+        }
+        await cargarTodo();
+        notificar("ok", `Catálogo de costos cargado: ${filasValidas.length} productos, vigente desde ${pLabel(vigenciaSubida)}.`);
+      } catch (e) {
+        notificar("error", "No se pudo leer o guardar el archivo: " + e.message);
+      }
+      setCargando(false);
     };
     const borrarPeriodo = async per => {
       await sb.from("cmi_acciones").delete().eq("periodo", per);
@@ -3006,6 +3111,54 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       estado: est(pctMargenLab, 0.30)
     })), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--gestion)"
+    }, "PRODUCTOS DE VENTA"), productosVentaCalc.tieneCatalogo ? null : /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "12px 16px",
+        marginBottom: 14,
+        borderColor: "var(--warn)"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "var(--warn)",
+        fontSize: 12.5
+      }
+    }, "A\xFAn no hay cat\xE1logo de costos vigente para este mes. Carga el archivo de Costos de Productos en la pesta\xF1a Datos.")), productosVentaCalc.sinCosto.length > 0 && /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "12px 16px",
+        marginBottom: 14,
+        borderColor: "var(--warn)"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "var(--warn)",
+        fontSize: 12.5
+      }
+    }, `${productosVentaCalc.sinCosto.length} producto(s) vendido(s) este mes sin costo en el cat\xE1logo (se excluyeron del costo, no de los ingresos): `, productosVentaCalc.sinCosto.map(([nombre]) => nombre).join(", "))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "Ingresos Productos de Venta",
+      value: clpK(productosVentaCalc.ingresos),
+      sub: clp(productosVentaCalc.ingresos)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Costo Productos de Venta",
+      value: clpK(productosVentaCalc.costo),
+      sub: clp(productosVentaCalc.costo)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "Ganancia Productos de Venta",
+      value: clpK(productosVentaCalc.ganancia),
+      sub: clp(productosVentaCalc.ganancia)
+    }), /*#__PURE__*/React.createElement(Metric, {
+      label: "% Margen Productos de Venta",
+      value: pct(productosVentaCalc.margen),
+      sub: "sobre ingreso \xB7 meta 40%",
+      estado: est(productosVentaCalc.margen, 0.40)
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
     }, "MANTENCIONES"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
@@ -3120,6 +3273,73 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         e.target.value = "";
       }
     })))), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--bone)"
+    }, "COSTOS DE PRODUCTOS DE VENTA"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "16px 18px",
+        marginBottom: 28
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)",
+        lineHeight: 1.55,
+        marginBottom: 14
+      }
+    }, "Cat\xE1logo de costo de compra por producto (para calcular Ganancia y % Margen de Productos de Venta). No es mensual: cada vez que subes el archivo queda como una versi\xF3n nueva, vigente desde el mes que elijas hacia adelante — los meses anteriores conservan el costo que ten\xEDan. La primera carga debe quedar vigente desde el inicio del panel."), costosProductos.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "var(--ok)",
+        marginBottom: 14
+      }
+    }, [...new Set(costosProductos.map(c => c[CP_VIG]))].sort().map(v => `${pLabel(v)} (${costosProductos.filter(c => c[CP_VIG] === v).length} productos)`).join("  \xB7  ")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        color: "var(--dim)",
+        display: "block",
+        marginBottom: 5
+      }
+    }, "Vigente desde"), /*#__PURE__*/React.createElement("select", {
+      value: vigenciaSubida,
+      onChange: e => setVigenciaSubida(e.target.value),
+      style: {
+        minWidth: 170
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Elige un mes\u2026"), [...periodos].reverse().map(p => /*#__PURE__*/React.createElement("option", {
+      key: p,
+      value: p
+    }, pLargo(p))))), /*#__PURE__*/React.createElement(Boton, {
+      tono: "claro",
+      chico: true,
+      disabled: cargando || !vigenciaSubida,
+      onClick: () => refCp.current?.click(),
+      style: {
+        marginTop: 16
+      }
+    }, cargando ? "Procesando…" : "Elegir archivo (.xlsx)")), /*#__PURE__*/React.createElement("input", {
+      ref: refCp,
+      type: "file",
+      accept: ".xlsx,.xls",
+      style: {
+        display: "none"
+      },
+      onChange: e => {
+        const f = e.target.files?.[0];
+        if (f) subirCostosProductos(f);
+        e.target.value = "";
+      }
+    })), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--bone)"
     }, "PER\xCDODOS EN EL SISTEMA"), /*#__PURE__*/React.createElement("div", {
       style: {
