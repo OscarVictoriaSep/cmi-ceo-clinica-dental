@@ -1838,102 +1838,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       dot: {
         r: 2.5
       }
-    }))))), K.doctores.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
-      color: "var(--op)"
-    }, "PRODUCTIVIDAD POR PROFESIONAL"), /*#__PURE__*/React.createElement(Panel, {
-      style: {
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        overflowX: "auto"
-      }
-    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Profesional"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "Facturaci\xF3n"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "% del mes"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "Fact. Cl\xEDnica"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "Fact. Laboratorios"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "Fact. Productos"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "Honorarios"), /*#__PURE__*/React.createElement("th", {
-      className: "num"
-    }, "% Honorario"))), /*#__PURE__*/React.createElement("tbody", null, K.doctores.map(d => /*#__PURE__*/React.createElement("tr", {
-      key: d.doctor
-    }, /*#__PURE__*/React.createElement("td", {
-      style: {
-        color: "var(--bone)"
-      }
-    }, d.doctor), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, clp(d.monto)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, pct(d.pct)), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, clp(d.montoClinica)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, clp(d.montoLabs)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, clp(d.montoProductos)), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, clp(d.honorario)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, pct(d.pctHonorario)))), /*#__PURE__*/React.createElement("tr", {
-      style: {
-        borderTop: "1px solid var(--line)",
-        fontWeight: 600
-      }
-    }, /*#__PURE__*/React.createElement("td", {
-      style: {
-        color: "var(--bone)"
-      }
-    }, "Total"), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, clp(K.facturacion)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, "100%"), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, clp(K.facturacionClinica)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, clp(K.facturacionLabs)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: "var(--dim)"
-      }
-    }, clp(K.facturacionProductos)), /*#__PURE__*/React.createElement("td", {
-      className: "num"
-    }, clp(K.honorarios)), /*#__PURE__*/React.createElement("td", {
-      className: "num",
-      style: {
-        color: (() => {
-          const ph = K.facturacionClinica ? K.honorarios / K.facturacionClinica : null;
-          const e = estHonorarioClinica(ph);
-          return e === "ok" ? "var(--ok)" : e === "warn" ? "var(--warn)" : e === "bad" ? "var(--bad)" : "var(--dim)";
-        })()
-      }
-    }, pct(K.facturacionClinica ? K.honorarios / K.facturacionClinica : null))))))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    })))))), tab === "publicidad" && hayDatos && K && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--meta)",
       right: /*#__PURE__*/React.createElement("span", {
         style: {
@@ -2815,7 +2720,116 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       label: "Ingresos por Venta de Productos",
       value: clpK(K.facturacionProductosVenta),
       sub: clp(K.facturacionProductosVenta)
-    }))), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
+    }, "HONORARIOS M\xC9DICOS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 18
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "% Honorarios / Facturaci\xF3n",
+      value: pct(K.pctHonorarios),
+      sub: `${clp(K.honorarios)} pagados a doctores \xB7 meta ~38%`,
+      estado: estHonorarios(K.pctHonorarios)
+    })), K.doctores.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
+    }, "PRODUCTIVIDAD POR PROFESIONAL"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Profesional"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Facturaci\xF3n"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "% del mes"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Fact. Cl\xEDnica"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Fact. Laboratorios"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Fact. Productos"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Honorarios"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "% Honorario"))), /*#__PURE__*/React.createElement("tbody", null, K.doctores.map(d => /*#__PURE__*/React.createElement("tr", {
+      key: d.doctor
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--bone)"
+      }
+    }, d.doctor), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(d.monto)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, pct(d.pct)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(d.montoClinica)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(d.montoLabs)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(d.montoProductos)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(d.honorario)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, pct(d.pctHonorario)))), /*#__PURE__*/React.createElement("tr", {
+      style: {
+        borderTop: "1px solid var(--line)",
+        fontWeight: 600
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--bone)"
+      }
+    }, "Total"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.facturacion)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, "100%"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.facturacionClinica)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(K.facturacionLabs)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, clp(K.facturacionProductos)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, clp(K.honorarios)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: (() => {
+          const ph = K.facturacionClinica ? K.honorarios / K.facturacionClinica : null;
+          const e = estHonorarioClinica(ph);
+          return e === "ok" ? "var(--ok)" : e === "warn" ? "var(--warn)" : e === "bad" ? "var(--bad)" : "var(--dim)";
+        })()
+      }
+    }, pct(K.facturacionClinica ? K.honorarios / K.facturacionClinica : null))))))))), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--bone)"
     }, "CARGAR ARCHIVOS"), /*#__PURE__*/React.createElement("div", {
       style: {
