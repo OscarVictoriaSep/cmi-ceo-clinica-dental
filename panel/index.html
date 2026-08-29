@@ -234,7 +234,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     A_TRA = 8,
     A_PZA = 9,
     A_DOC = 10,
-    A_HON = 11;
+    A_HON = 11,
+    A_MAIL = 12;
   const P_PER = 0,
     P_PID = 1,
     P_REF = 4,
@@ -271,7 +272,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         tratamiento: String(r["# Tratamiento"] ?? "").trim(),
         pieza: String(r["Pieza Tratada"] ?? "").trim(),
         doctor: `${String(r["Nombre Profesional Realizador"] ?? "").trim()} ${String(r["Apellidos Profesional Realizador"] ?? "").trim()}`.trim(),
-        honorario: toNum(r["Total a pagar profesional"])
+        honorario: toNum(r["Total a pagar profesional"]),
+        email: String(r["E-Mail"] ?? "").trim()
       };
       if (!out.has(per)) out.set(per, []);
       out.get(per).push(fila);
@@ -373,7 +375,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   }
 
   /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
-  const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0];
+  const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0, r.email || ""];
   const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || "", r.celular || "", r.email || ""];
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
   const IN_PER = 0,
@@ -469,12 +471,23 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       }
     };
     const desde = shiftPeriodo(maxPeriodo, -(meses - 1));
+    /* El email vive en Acciones Realizadas y cubre a TODO paciente atendido (nuevo o antiguo).
+       Pacientes Nuevos solo cubre captaciones nuevas, pero es la única fuente con celular — se usa de respaldo/complemento. */
     const contacto = new Map();
     pn.forEach(r => {
       contacto.set(r[P_PID], {
         celular: r[P_CEL],
         email: r[P_MAIL]
       });
+    });
+    acc.forEach(f => {
+      if (!f[A_MAIL]) return;
+      const prev = contacto.get(f[A_PID]) || {
+        celular: "",
+        email: ""
+      };
+      if (!prev.email) prev.email = f[A_MAIL];
+      contacto.set(f[A_PID], prev);
     });
     const ortoSet = new Set(),
       rehabSet = new Set(),
