@@ -174,6 +174,19 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [a, m] = k.split("-").map(Number);
     return a * 12 + m;
   };
+  const shiftPeriodo = (k, n) => {
+    const s = pSerial(k) + n;
+    const a = Math.floor((s - 1) / 12);
+    const m = s - a * 12;
+    return `${a}-${String(m).padStart(2, "0")}`;
+  };
+  /* Normaliza celulares chilenos al formato que Meta espera para audiencias: solo dígitos, con código de país 56 */
+  const normTelefonoCL = cel => {
+    let d = String(cel ?? "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.length === 9 && d.startsWith("9")) d = "56" + d;else if (d.length === 8) d = "569" + d;
+    return d;
+  };
   const pLabel = k => {
     const [a, m] = k.split("-").map(Number);
     return `${MES_ABR[m - 1]} ${a}`;
@@ -224,7 +237,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     A_HON = 11;
   const P_PER = 0,
     P_PID = 1,
-    P_REF = 4;
+    P_REF = 4,
+    P_CEL = 5,
+    P_MAIL = 6;
   const PG_PER = 0,
     PG_ID = 1,
     PG_PID = 2,
@@ -280,7 +295,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         periodo: per,
         pid,
         rut: normRut(r["RUT Paciente"]),
-        referencia: String(r["Referencia Paciente"] ?? "").trim().toUpperCase()
+        referencia: String(r["Referencia Paciente"] ?? "").trim().toUpperCase(),
+        celular: String(r["Celular"] ?? "").trim(),
+        email: String(r["E-Mail"] ?? "").trim()
       };
       if (!out.has(per)) out.set(per, []);
       out.get(per).push(fila);
@@ -357,7 +374,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
 
   /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
   const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0];
-  const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || ""];
+  const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || "", r.celular || "", r.email || ""];
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
   const IN_PER = 0,
     IN_BOD = 1,
@@ -425,6 +442,78 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       margen,
       sinCosto: [...sinCosto.entries()],
       tieneCatalogo: mapa.size > 0
+    };
+  }
+
+  /* Audiencias Meta Lookalike: pacientes que tuvieron AL MENOS UNA prestación de la categoría dentro de la
+     ventana de meses elegida (no requiere que el tratamiento esté "cerrado" — más universo para el Lookalike). */
+  function calcularAudiencias(acc, pn, maxPeriodo, meses) {
+    if (!maxPeriodo) return {
+      ortodoncia: [],
+      implantes: [],
+      rehabilitacion: [],
+      consolidado: [],
+      totales: {
+        ortoPids: 0,
+        implPids: 0,
+        rehabPids: 0
+      }
+    };
+    const desde = shiftPeriodo(maxPeriodo, -(meses - 1));
+    const contacto = new Map();
+    pn.forEach(r => {
+      contacto.set(r[P_PID], {
+        celular: r[P_CEL],
+        email: r[P_MAIL]
+      });
+    });
+    const ortoSet = new Set(),
+      rehabSet = new Set(),
+      implSet = new Set();
+    for (const f of acc) {
+      const per = f[A_PER];
+      if (per < desde || per > maxPeriodo) continue;
+      if (f[A_CAT] === "ORTODONCIA") ortoSet.add(f[A_PID]);
+      if (f[A_CAT] === "REHABILITACIÓN ORAL") rehabSet.add(f[A_PID]);
+      if (f[A_CAT] === "IMPLANTOLOGÍA") implSet.add(f[A_PID]);
+    }
+    const ortoPids = [...ortoSet];
+    const rehabPids = [...rehabSet];
+    const implPids = [...implSet];
+    const conContacto = pids => pids.filter(pid => {
+      const c = contacto.get(pid);
+      return c && (normTelefonoCL(c.celular) || c.email);
+    }).map(pid => {
+      const c = contacto.get(pid);
+      return {
+        email: (c.email || "").trim(),
+        phone: normTelefonoCL(c.celular)
+      };
+    });
+    const ortodoncia = conContacto(ortoPids);
+    const implantes = conContacto(implPids);
+    const rehabilitacion = conContacto(rehabPids);
+    const vistos = new Set();
+    const consolidado = [];
+    [...ortoPids, ...implPids, ...rehabPids].forEach(pid => {
+      if (vistos.has(pid)) return;
+      vistos.add(pid);
+      const c = contacto.get(pid);
+      if (c && (normTelefonoCL(c.celular) || c.email)) consolidado.push({
+        email: (c.email || "").trim(),
+        phone: normTelefonoCL(c.celular)
+      });
+    });
+    return {
+      ortodoncia,
+      implantes,
+      rehabilitacion,
+      consolidado,
+      totales: {
+        ortoPids: ortoPids.length,
+        implPids: implPids.length,
+        rehabPids: rehabPids.length
+      }
     };
   }
 
@@ -1170,6 +1259,23 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, cargando ? "Entrando…" : "Entrar"))));
   }
 
+  /* Descarga un CSV de audiencia (formato email,phone que espera Meta Ads) directamente en el navegador */
+  const descargarAudienciaCSV = (nombreArchivo, filas) => {
+    const cuerpo = filas.map(f => `${f.email || ""},${f.phone || ""}`).join("\n");
+    const csv = "email,phone\n" + cuerpo;
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8;"
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   /* ═══════════════════ APP PRINCIPAL ═══════════════════ */
   function PanelCMI({
     session,
@@ -1185,6 +1291,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [insumos, setInsumos] = useState([]);
     const [costosProductos, setCostosProductos] = useState([]);
     const [vigenciaSubida, setVigenciaSubida] = useState("");
+    const [ventanaAudiencia, setVentanaAudiencia] = useState(2);
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
     useEffect(() => {
@@ -1288,6 +1395,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       sinCosto: [],
       tieneCatalogo: false
     }, [periodo, acc, costosProductos]);
+    const audiencias = useMemo(() => calcularAudiencias(acc, pn, periodos.length ? periodos[periodos.length - 1] : null, ventanaAudiencia), [acc, pn, periodos, ventanaAudiencia]);
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx);
@@ -3422,6 +3530,88 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         e.target.value = "";
       }
     })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--bone)"
+    }, "AUDIENCIAS META LOOKALIKE"), /*#__PURE__*/React.createElement(Panel, {
+      style: {
+        padding: "16px 18px",
+        marginBottom: 28
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)",
+        lineHeight: 1.55,
+        marginBottom: 14
+      }
+    }, "Pacientes con al menos una prestaci\xF3n de la categor\xEDa dentro de la ventana elegida abajo, con correo/tel\xE9fono, listos para subir como Audiencia Personalizada en Meta Ads Manager. No requiere que el tratamiento est\xE9 cerrado \u2014 mientras m\xE1s ancha la ventana, m\xE1s universo. Si el conteo se ve bajo, probablemente falte volver a subir Pacientes Nuevos con las columnas Celular y E-Mail incluidas."), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("label", {
+      style: {
+        fontSize: 10,
+        letterSpacing: ".12em",
+        textTransform: "uppercase",
+        color: "var(--dim)",
+        display: "block",
+        marginBottom: 6
+      }
+    }, "Ventana"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6
+      }
+    }, [2, 3, 6, 12].map(m => /*#__PURE__*/React.createElement("button", {
+      key: m,
+      onClick: () => setVentanaAudiencia(m),
+      style: {
+        padding: "5px 12px",
+        fontSize: 11.5,
+        fontWeight: 500,
+        borderRadius: 6,
+        border: "1px solid var(--line)",
+        background: ventanaAudiencia === m ? "var(--bone)" : "transparent",
+        color: ventanaAudiencia === m ? "#0B0B0C" : "var(--dim)"
+      }
+    }, `${m} ${m === 1 ? "mes" : "meses"}`)))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+        gap: 10
+      }
+    }, [["Ortodoncia (brackets)", audiencias.ortodoncia, "orto_completados.csv"], ["Implantes", audiencias.implantes, "implantes_completados.csv"], ["Rehabilitaci\xF3n Oral", audiencias.rehabilitacion, "rehabilitacion_completados.csv"], ["Consolidado (los 3)", audiencias.consolidado, "consolidado_completados.csv"]].map(([nom, filas, archivo]) => /*#__PURE__*/React.createElement("div", {
+      key: nom,
+      style: {
+        border: "1px solid var(--line)",
+        borderRadius: 8,
+        padding: "12px 14px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--dim)",
+        marginBottom: 4
+      }
+    }, nom), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "'Bebas Neue',sans-serif",
+        fontSize: 22,
+        letterSpacing: ".02em",
+        marginBottom: 10
+      }
+    }, ent(filas.length), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "var(--dim)",
+        fontFamily: "inherit",
+        marginLeft: 5
+      }
+    }, "con contacto")), /*#__PURE__*/React.createElement(Boton, {
+      tono: "claro",
+      chico: true,
+      disabled: !filas.length,
+      onClick: () => descargarAudienciaCSV(archivo, filas)
+    }, "Descargar CSV"))))), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--bone)"
     }, "PER\xCDODOS EN EL SISTEMA"), /*#__PURE__*/React.createElement("div", {
       style: {
