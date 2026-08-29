@@ -1405,6 +1405,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const pctMargenLab = K?.facturacionLabs ? gananciaLab / K.facturacionLabs : null;
     const mantenciones = Number(ivPeriodo.mantenciones) || 0;
     const pctMantenciones = K?.facturacion ? mantenciones / K.facturacion : null;
+    const pctInversionPautas = K?.facturacion ? ((ivPeriodo.meta || 0) + (ivPeriodo.google || 0)) / K.facturacion : null;
     const insumosCalc = useMemo(() => periodo ? calcularInsumos(periodo, insumos) : {
       costoInsumos: 0,
       merma: 0
@@ -3388,6 +3389,20 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       value: pct(pctMantenciones, 2),
       sub: "l\xEDmite 0,68%",
       estado: estMax(pctMantenciones, 0.0068)
+    })), /*#__PURE__*/React.createElement(SecTitle, {
+      color: "var(--gestion)"
+    }, "PAUTAS"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+        gap: 11,
+        marginBottom: 26
+      }
+    }, /*#__PURE__*/React.createElement(Metric, {
+      label: "% Inversi\xF3n Publicidad (Pautas)",
+      value: pct(pctInversionPautas, 2),
+      sub: `${clp((ivPeriodo.meta || 0) + (ivPeriodo.google || 0))} en Meta + Google \xB7 l\xEDmite 8%`,
+      estado: estMax(pctInversionPautas, 0.08)
     }))), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--bone)"
     }, "CARGAR ARCHIVOS"), /*#__PURE__*/React.createElement("div", {
