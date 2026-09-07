@@ -688,14 +688,16 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     };
     const canalKpi = (pids, gasto) => {
       const n = pids.length;
+      const atendidos = pids.filter(p => atendidosSet.has(p)).length;
       const ingMes = pids.reduce((s, p) => s + (idx.pagoPorPidPer.get(p + "|" + per) || 0), 0);
       const ingAcum = pids.reduce((s, p) => s + (idx.pagoPorPid.get(p) || 0), 0);
       return {
         pacientes: n,
+        atendidos,
         inversion: gasto || 0,
         ingMes,
         ingAcum,
-        cpa: n && gasto ? gasto / n : null,
+        cpa: atendidos && gasto ? gasto / atendidos : null,
         roasMes: gasto ? ingMes / gasto : null,
         roasAcum: gasto ? ingAcum / gasto : null
       };
@@ -2428,9 +2430,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       label: "Pacientes captados",
       value: ent(c.pacientes)
     }), /*#__PURE__*/React.createElement(Row, {
+      label: "Pacientes atendidos",
+      value: ent(c.atendidos),
+      hint: "Con presupuesto/cita real, no solo agendados"
+    }), /*#__PURE__*/React.createElement(Row, {
       label: "CPA",
       value: c.cpa ? clp(c.cpa) : "—",
-      hint: "Inversi\xF3n \xF7 pacientes captados"
+      hint: "Inversi\xF3n \xF7 pacientes atendidos"
     }), /*#__PURE__*/React.createElement(Row, {
       label: "Ingresos del mes",
       value: clp(c.ingMes),
@@ -2494,6 +2500,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, "Pacientes"), /*#__PURE__*/React.createElement("th", {
       className: "num"
+    }, "Atendidos"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
     }, "Inversi\xF3n"), /*#__PURE__*/React.createElement("th", {
       className: "num"
     }, "CPA"), /*#__PURE__*/React.createElement("th", {
@@ -2509,6 +2517,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, "Meta Ads"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, ent(K.meta.pacientes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.meta.atendidos)), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, K.meta.inversion ? clp(K.meta.inversion) : "—"), /*#__PURE__*/React.createElement("td", {
       className: "num"
@@ -2526,6 +2536,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, ent(K.google.pacientes)), /*#__PURE__*/React.createElement("td", {
       className: "num"
+    }, ent(K.google.atendidos)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
     }, K.google.inversion ? clp(K.google.inversion) : "—"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, K.google.cpa ? clp(K.google.cpa) : "—"), /*#__PURE__*/React.createElement("td", {
@@ -2541,6 +2553,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, "Recomienda CEO"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, ent(K.referidos.pacientes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
       className: "num",
       style: {
         color: "var(--dim)"
@@ -2560,6 +2574,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, "Org\xE1nico"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, ent(K.organico)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
       className: "num",
       style: {
         color: "var(--dim)"
@@ -2579,6 +2595,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, "Sin origen registrado"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, ent(K.totalPN - K.conRef)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, "\u2014"), /*#__PURE__*/React.createElement("td", {
       className: "num"
