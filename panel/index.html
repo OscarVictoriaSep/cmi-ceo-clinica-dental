@@ -338,6 +338,35 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       ignoradas
     };
   }
+  const NO_ATENDIDO = "PACIENTE AÚN NO ATENDIDO";
+  /* Presupuestos Generados: usado para saber si un paciente REALMENTE se atendió (no solo agendó/quedó
+     con ficha creada). "Fecha Afiliación" trae la fecha real de la cita si asistió, o el texto literal
+     "Paciente aún no atendido" si nunca llegó. Un paciente puede tener varios tratamientos generados;
+     basta que UNO tenga fecha real para considerarlo atendido. */
+  function mapPresupuestos(rows) {
+    const out = new Map();
+    let ignoradas = 0;
+    for (const r of rows) {
+      const per = pKey(r["Mes de generación del tratamiento"], r["Año de generación del tratamiento"]);
+      const pid = String(r["# Paciente"] ?? "").trim();
+      if (!per || !pid) {
+        ignoradas++;
+        continue;
+      }
+      const fila = {
+        periodo: per,
+        pid,
+        tratamiento: String(r["# Tratamiento"] ?? "").trim(),
+        fecha_afiliacion: String(r["Fecha Afiliación"] ?? "").trim()
+      };
+      if (!out.has(per)) out.set(per, []);
+      out.get(per).push(fila);
+    }
+    return {
+      grupos: out,
+      ignoradas
+    };
+  }
 
   /* El reporte de Inventario de Dentalink usa "." solo como separador de miles (nunca decimal): "3.500" = 3500 */
   const toNumCLP = v => {
@@ -378,6 +407,19 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0, r.email || ""];
   const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || "", r.celular || "", r.email || ""];
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
+  const PR_PER = 0,
+    PR_PID = 1,
+    PR_FECHA = 3;
+  const presupuestosToArr = r => [r.periodo, r.pid || "", r.tratamiento || "", r.fecha_afiliacion || ""];
+  /* Set de pids que REALMENTE se atendieron (histórico completo, sin importar el mes en que se generó el
+     presupuesto): basta con que una fila tenga una fecha real en vez del texto "Paciente aún no atendido". */
+  function pidsAtendidos(presupuestos) {
+    const set = new Set();
+    presupuestos.forEach(f => {
+      if (String(f[PR_FECHA] || "").trim().toUpperCase() !== NO_ATENDIDO) set.add(f[PR_PID]);
+    });
+    return set;
+  }
   const IN_PER = 0,
     IN_BOD = 1,
     IN_TIPO = 2,
@@ -607,7 +649,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       pidsNuevos
     };
   }
-  function calcularPeriodo(per, acc, pn, inversion, idx) {
+  function calcularPeriodo(per, acc, pn, inversion, idx, presupuestos) {
     const accP = acc.filter(f => f[A_PER] === per);
     const pnP = pn.filter(r => r[P_PER] === per);
     const facturacion = accP.reduce((s, f) => s + f[A_PAG], 0);
@@ -624,7 +666,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const prodSillon = facturacion / 3;
     const totalPN = pnP.length;
     const conRef = pnP.filter(r => r[P_REF] !== "").length;
-    const trazabilidad = totalPN ? conRef / totalPN : null;
+    const atendidosSet = pidsAtendidos(presupuestos || []);
+    const pnPAtendidos = pnP.filter(r => atendidosSet.has(r[P_PID]));
+    const totalPNAtendidos = pnPAtendidos.length;
+    const conRefAtendidos = pnPAtendidos.filter(r => r[P_REF] !== "").length;
+    const trazabilidad = totalPNAtendidos ? conRefAtendidos / totalPNAtendidos : null;
     const porCanal = {
       META: [],
       GOOGLE: [],
@@ -758,6 +804,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       prodSillon,
       totalPN,
       conRef,
+      totalPNAtendidos,
+      conRefAtendidos,
       trazabilidad,
       meta,
       google,
@@ -1313,6 +1361,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [pagos, setPagos] = useState([]);
     const [insumos, setInsumos] = useState([]);
     const [costosProductos, setCostosProductos] = useState([]);
+    const [presupuestos, setPresupuestos] = useState([]);
     const [vigenciaSubida, setVigenciaSubida] = useState("");
     const [ventanaAudiencia, setVentanaAudiencia] = useState(2);
     const [periodo, setPeriodo] = useState(null);
@@ -1333,7 +1382,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       refAf = useRef(null),
       refPg = useRef(null),
       refIn = useRef(null),
-      refCp = useRef(null);
+      refCp = useRef(null),
+      refPr = useRef(null);
     const notificar = (tipo, texto) => {
       setAviso({
         tipo,
@@ -1357,7 +1407,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       return todas;
     };
     const cargarTodo = async () => {
-      const [da, dp, df, di, dpg, dins, dcp] = await Promise.all([
+      const [da, dp, df, di, dpg, dins, dcp, dpr] = await Promise.all([
         traerTodasLasFilas("cmi_acciones", "*"),
         traerTodasLasFilas("cmi_pacientes_nuevos", "*"),
         traerTodasLasFilas("cmi_afiliados", "rut"),
@@ -1365,6 +1415,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         traerTodasLasFilas("cmi_pagos", "*"),
         traerTodasLasFilas("cmi_insumos", "*"),
         traerTodasLasFilas("cmi_costos_productos", "*"),
+        traerTodasLasFilas("cmi_presupuestos", "*"),
       ]);
       setAcc((da || []).map(accToArr));
       setPn((dp || []).map(pnToArr));
@@ -1372,6 +1423,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       setPagos((dpg || []).map(pagosToArr));
       setInsumos((dins || []).map(insumosToArr));
       setCostosProductos((dcp || []).map(costosProductosToArr));
+      setPresupuestos((dpr || []).map(presupuestosToArr));
       const invObj = {};
       (di || []).forEach(r => {
         invObj[r.periodo] = {
@@ -1395,7 +1447,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const periodosPn = useMemo(() => [...new Set(pn.map(r => r[P_PER]))].sort(), [pn]);
     const periodos = useMemo(() => [...new Set([...periodosAcc, ...periodosPn])].sort(), [periodosAcc, periodosPn]);
     const idx = useMemo(() => construirIndices(acc, pn), [acc, pn]);
-    const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx) : null, [periodo, acc, pn, inversion, idx]);
+    const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx, presupuestos) : null, [periodo, acc, pn, inversion, idx, presupuestos]);
     const V = useMemo(() => periodo ? calcularVentanas(periodo, acc, afiliados) : null, [periodo, acc, afiliados]);
     const ingresoEfectivo = useMemo(() => periodo ? calcularIngresoEfectivo(periodo, pagos) : 0, [periodo, pagos]);
     const ivPeriodo = inversion[periodo] || {};
@@ -1422,7 +1474,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const audiencias = useMemo(() => calcularAudiencias(acc, pn, periodos.length ? periodos[periodos.length - 1] : null, ventanaAudiencia), [acc, pn, periodos, ventanaAudiencia]);
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
-      const k = calcularPeriodo(p, acc, pn, inversion, idx);
+      const k = calcularPeriodo(p, acc, pn, inversion, idx, presupuestos);
       const iv = inversion[p] || {
         meta: 0,
         google: 0
@@ -1442,7 +1494,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         invGoogle: Number(iv.google) || 0,
         invTotal: (Number(iv.meta) || 0) + (Number(iv.google) || 0)
       };
-    }), [periodos, acc, pn, inversion, idx, pagos]);
+    }), [periodos, acc, pn, inversion, idx, pagos, presupuestos]);
 
     /* — Subir Acciones Realizadas — */
     const subirAcciones = file => {
@@ -1679,6 +1731,54 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         }
       });
     };
+    /* — Subir Presupuestos Generados — usado para saber si un paciente realmente se atendió — */
+    const subirPresupuestos = file => {
+      setCargando(true);
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8",
+        complete: async res => {
+          try {
+            const cols = res.meta.fields || [];
+            if (!cols.includes("# Paciente") || !cols.includes("Fecha Afiliación") || !cols.includes("Mes de generación del tratamiento")) {
+              notificar("error", "Ese archivo no es de Presupuestos Generados: faltan columnas clave.");
+              setCargando(false);
+              return;
+            }
+            const {
+              grupos,
+              ignoradas
+            } = mapPresupuestos(res.data);
+            if (!grupos.size) {
+              notificar("error", "No se encontraron filas con período válido.");
+              setCargando(false);
+              return;
+            }
+            const periodosSubidos = [...grupos.keys()];
+            for (const per of periodosSubidos) {
+              await sb.from("cmi_presupuestos").delete().eq("periodo", per);
+            }
+            for (const per of periodosSubidos) {
+              const filas = grupos.get(per);
+              for (let i = 0; i < filas.length; i += 500) {
+                await sb.from("cmi_presupuestos").insert(filas.slice(i, i + 500));
+              }
+            }
+            await cargarTodo();
+            const pers = periodosSubidos.sort();
+            notificar("ok", `Presupuestos cargados: ${pers.map(pLabel).join(", ")}.${ignoradas ? ` ${ignoradas} filas sin período se omitieron.` : ""}`);
+          } catch (e) {
+            notificar("error", "No se pudo guardar: " + e.message);
+          }
+          setCargando(false);
+        },
+        error: () => {
+          notificar("error", "No se pudo leer el archivo.");
+          setCargando(false);
+        }
+      });
+    };
     /* — Subir Catálogo de Costos de Productos de Venta (.xlsx, con vigencia elegida por el usuario) — */
     const subirCostosProductos = async file => {
       if (!vigenciaSubida) {
@@ -1728,6 +1828,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
       await sb.from("cmi_pagos").delete().eq("periodo", per);
       await sb.from("cmi_insumos").delete().eq("periodo", per);
+      await sb.from("cmi_presupuestos").delete().eq("periodo", per);
       await cargarTodo();
       notificar("ok", `${pLargo(per)} eliminado.`);
     };
@@ -2014,7 +2115,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       value: pct(K.trazabilidad),
       meta: `Meta ${pct(METAS.trazabilidad, 0)}`,
       estado: est(K.trazabilidad, METAS.trazabilidad),
-      sub: `${K.conRef} de ${K.totalPN} con origen`
+      sub: `${K.conRefAtendidos} de ${K.totalPNAtendidos} atendidos con origen`
     })), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--op)"
     }, "EVOLUCI\xD3N"), /*#__PURE__*/React.createElement("div", {
@@ -2259,7 +2360,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       style: {
         color: "var(--dim)"
       }
-    }, " ", "\u2014 ", K.conRef, " de ", K.totalPN, " pacientes nuevos tienen origen registrado.", K.trazabilidad >= METAS.trazabilidad ? " El CPA y el ROAS de este mes son confiables." : " Bajo el 90% de referencia, el CPA y el ROAS subestiman la captación: los pacientes sin origen no se atribuyen a ningún canal."))), !inversion[periodo]?.meta && !inversion[periodo]?.google && /*#__PURE__*/React.createElement(Panel, {
+    }, " ", "\u2014 ", K.conRefAtendidos, " de ", K.totalPNAtendidos, " pacientes que efectivamente se atendieron tienen origen registrado (de ", K.totalPN, " captados en el mes).", K.trazabilidad >= METAS.trazabilidad ? " El CPA y el ROAS de este mes son confiables." : " Bajo el 90% de referencia, el CPA y el ROAS subestiman la captación: los pacientes sin origen no se atribuyen a ningún canal."))), !inversion[periodo]?.meta && !inversion[periodo]?.google && /*#__PURE__*/React.createElement(Panel, {
       style: {
         padding: "13px 16px",
         marginBottom: 16,
@@ -3448,6 +3549,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       n: insumos.length,
       u: "filas",
       accept: ".xls,.csv,.tsv,.txt"
+    }, {
+      t: "Presupuestos Generados",
+      d: "Usado para Trazabilidad de origen: identifica qu\xE9 pacientes nuevos realmente se atendieron (no solo agendaron). Reemplaza los meses que traiga el archivo.",
+      r: refPr,
+      fn: subirPresupuestos,
+      n: presupuestos.length,
+      u: "filas"
     }].map(c => /*#__PURE__*/React.createElement(Panel, {
       key: c.t,
       style: {
