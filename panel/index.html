@@ -211,6 +211,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     if (u === "GOOGLE") return "GOOGLE";
     if (u.startsWith("REFERIDO")) return "REFERIDOS";
     if (u === "ORGANICO" || u === "ORGÁNICO") return "ORGANICO";
+    if (u === "PACIENTE ANTIGUO") return "ANTIGUO";
     return u ? "OTRO" : "";
   };
   const PIEZA_RE = /^\d+\s*:/;
@@ -676,6 +677,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       GOOGLE: [],
       REFERIDOS: [],
       ORGANICO: [],
+      ANTIGUO: [],
       OTRO: []
     };
     for (const r of pnP) {
@@ -728,6 +730,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       ingAcum: porCanal.REFERIDOS.reduce((s, p) => s + (idx.pagoPorPid.get(p) || 0), 0)
     };
     const organico = porCanal.ORGANICO.length;
+    const antiguo = porCanal.ANTIGUO.length;
     const mixMap = new Map();
     for (const f of accP) mixMap.set(f[A_CAT], (mixMap.get(f[A_CAT]) || 0) + f[A_PAG]);
     const mix = CATEGORIAS.map(c => ({
@@ -813,6 +816,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       google,
       referidos,
       organico,
+      antiguo,
       mix,
       casosOrto,
       casosImpl,
@@ -2574,6 +2578,27 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }, "Org\xE1nico"), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, ent(K.organico)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, "sin costo"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, "\u2014")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        color: "var(--dim)"
+      }
+    }, "Paciente Antiguo"), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, ent(K.antiguo)), /*#__PURE__*/React.createElement("td", {
       className: "num"
     }, "\u2014"), /*#__PURE__*/React.createElement("td", {
       className: "num",
