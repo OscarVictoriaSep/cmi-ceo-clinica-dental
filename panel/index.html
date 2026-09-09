@@ -512,6 +512,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       implantes: [],
       rehabilitacion: [],
       consolidado: [],
+      implantesDesglose: {
+        porPrestacion: 0,
+        porSoloPresupuesto: 0
+      },
       totales: {
         ortoPids: 0,
         implPids: 0,
@@ -539,15 +543,16 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     });
     const ortoSet = new Set(),
       rehabSet = new Set(),
-      implSet = new Set();
+      implSetPrestacion = new Set();
     for (const f of acc) {
       const per = f[A_PER];
       if (per < desde || per > maxPeriodo) continue;
       const cat = categoriaEfectiva(f);
       if (cat === "ORTODONCIA") ortoSet.add(f[A_PID]);
       if (cat === "REHABILITACIÓN ORAL") rehabSet.add(f[A_PID]);
-      if (cat === "IMPLANTOLOGÍA") implSet.add(f[A_PID]);
+      if (cat === "IMPLANTOLOGÍA") implSetPrestacion.add(f[A_PID]);
     }
+    const implSet = new Set(implSetPrestacion);
     (presupuestos || []).forEach(f => {
       const per = f[PR_PER];
       if (per < desde || per > maxPeriodo) return;
@@ -569,7 +574,19 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       };
     });
     const ortodoncia = conContacto(ortoPids);
-    const implantes = conContacto(implPids);
+    const implPidsConContacto = implPids.filter(pid => {
+      const c = contacto.get(pid);
+      return c && (normTelefonoCL(c.celular) || c.email);
+    });
+    const implantes = implPidsConContacto.map(pid => {
+      const c = contacto.get(pid);
+      return {
+        email: (c.email || "").trim(),
+        phone: normTelefonoCL(c.celular)
+      };
+    });
+    const implPorPrestacion = implPidsConContacto.filter(pid => implSetPrestacion.has(pid)).length;
+    const implPorSoloPresupuesto = implPidsConContacto.length - implPorPrestacion;
     const rehabilitacion = conContacto(rehabPids);
     const vistos = new Set();
     const consolidado = [];
@@ -587,6 +604,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       implantes,
       rehabilitacion,
       consolidado,
+      implantesDesglose: {
+        porPrestacion: implPorPrestacion,
+        porSoloPresupuesto: implPorSoloPresupuesto
+      },
       totales: {
         ortoPids: ortoPids.length,
         implPids: implPids.length,
@@ -3807,7 +3828,15 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         fontFamily: "inherit",
         marginLeft: 5
       }
-    }, "con contacto")), /*#__PURE__*/React.createElement(Boton, {
+    }, "con contacto")), nom === "Implantes" && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10.5,
+        color: "var(--dim)",
+        marginTop: -6,
+        marginBottom: 10,
+        lineHeight: 1.5
+      }
+    }, `${ent(audiencias.implantesDesglose.porPrestacion)} por prestaci\xF3n \xB7 ${ent(audiencias.implantesDesglose.porSoloPresupuesto)} por solo presupuesto`), /*#__PURE__*/React.createElement(Boton, {
       tono: "claro",
       chico: true,
       disabled: !filas.length,
