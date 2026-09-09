@@ -358,7 +358,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         periodo: per,
         pid,
         tratamiento: String(r["# Tratamiento"] ?? "").trim(),
-        fecha_afiliacion: String(r["Fecha Afiliación"] ?? "").trim()
+        fecha_afiliacion: String(r["Fecha Afiliación"] ?? "").trim(),
+        profesional: `${String(r["Nombre Profesional Tratamiento"] ?? "").trim()} ${String(r["Apellidos Profesional Tratamiento"] ?? "").trim()}`.trim()
       };
       if (!out.has(per)) out.set(per, []);
       out.get(per).push(fila);
@@ -410,8 +411,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
   const PR_PER = 0,
     PR_PID = 1,
-    PR_FECHA = 3;
-  const presupuestosToArr = r => [r.periodo, r.pid || "", r.tratamiento || "", r.fecha_afiliacion || ""];
+    PR_FECHA = 3,
+    PR_PROF = 4;
+  const presupuestosToArr = r => [r.periodo, r.pid || "", r.tratamiento || "", r.fecha_afiliacion || "", r.profesional || ""];
   /* Set de pids que REALMENTE se atendieron (histórico completo, sin importar el mes en que se generó el
      presupuesto): basta con que una fila tenga una fecha real en vez del texto "Paciente aún no atendido". */
   function pidsAtendidos(presupuestos) {
@@ -499,9 +501,12 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   };
   const categoriaEfectiva = f => f[A_CAT] === "REHABILITACIÓN ORAL" && esOrtoMalclasificada(f[A_PRE]) ? "ORTODONCIA" : f[A_CAT];
 
+  const IMPLANTOLOGO_PRESUPUESTO = "ALVARO ANDRES SIERRA FUENTES";
   /* Audiencias Meta Lookalike: pacientes que tuvieron AL MENOS UNA prestación de la categoría dentro de la
-     ventana de meses elegida (no requiere que el tratamiento esté "cerrado" — más universo para el Lookalike). */
-  function calcularAudiencias(acc, pn, maxPeriodo, meses) {
+     ventana de meses elegida (no requiere que el tratamiento esté "cerrado" — más universo para el Lookalike).
+     Implantes suma además a quienes tuvieron un presupuesto generado con el implantólogo Sierra Fuentes (aunque
+     no llegaran a tener una acción de Implantología cobrada), siempre que sí hayan asistido a esa cita. */
+  function calcularAudiencias(acc, pn, presupuestos, maxPeriodo, meses) {
     if (!maxPeriodo) return {
       ortodoncia: [],
       implantes: [],
@@ -543,6 +548,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       if (cat === "REHABILITACIÓN ORAL") rehabSet.add(f[A_PID]);
       if (cat === "IMPLANTOLOGÍA") implSet.add(f[A_PID]);
     }
+    (presupuestos || []).forEach(f => {
+      const per = f[PR_PER];
+      if (per < desde || per > maxPeriodo) return;
+      if (String(f[PR_PROF] || "").trim().toUpperCase() !== IMPLANTOLOGO_PRESUPUESTO) return;
+      if (String(f[PR_FECHA] || "").trim().toUpperCase() === NO_ATENDIDO) return;
+      implSet.add(f[PR_PID]);
+    });
     const ortoPids = [...ortoSet];
     const rehabPids = [...rehabSet];
     const implPids = [...implSet];
@@ -1477,7 +1489,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       sinCosto: [],
       tieneCatalogo: false
     }, [periodo, acc, costosProductos]);
-    const audiencias = useMemo(() => calcularAudiencias(acc, pn, periodos.length ? periodos[periodos.length - 1] : null, ventanaAudiencia), [acc, pn, periodos, ventanaAudiencia]);
+    const audiencias = useMemo(() => calcularAudiencias(acc, pn, presupuestos, periodos.length ? periodos[periodos.length - 1] : null, ventanaAudiencia), [acc, pn, presupuestos, periodos, ventanaAudiencia]);
     const periodosPagos = useMemo(() => [...new Set(pagos.map(p => p[PG_PER]))].sort(), [pagos]);
     const serie = useMemo(() => periodos.map(p => {
       const k = calcularPeriodo(p, acc, pn, inversion, idx, presupuestos);
@@ -3732,7 +3744,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         lineHeight: 1.55,
         marginBottom: 14
       }
-    }, "Pacientes con al menos una prestaci\xF3n de la categor\xEDa dentro de la ventana elegida abajo, con correo/tel\xE9fono, listos para subir como Audiencia Personalizada en Meta Ads Manager. No requiere que el tratamiento est\xE9 cerrado \u2014 mientras m\xE1s ancha la ventana, m\xE1s universo. Si el conteo se ve bajo, probablemente falte volver a subir Pacientes Nuevos con las columnas Celular y E-Mail incluidas."), /*#__PURE__*/React.createElement("div", {
+    }, "Pacientes con al menos una prestaci\xF3n de la categor\xEDa dentro de la ventana elegida abajo, con correo/tel\xE9fono, listos para subir como Audiencia Personalizada en Meta Ads Manager. No requiere que el tratamiento est\xE9 cerrado \u2014 mientras m\xE1s ancha la ventana, m\xE1s universo. Implantes suma adem\xE1s a quienes tuvieron un presupuesto atendido con el Dr. Sierra Fuentes, aunque no se les haya cobrado una acci\xF3n de Implantolog\xEDa. Si el conteo se ve bajo, probablemente falte volver a subir Pacientes Nuevos con las columnas Celular y E-Mail incluidas."), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 16
       }
