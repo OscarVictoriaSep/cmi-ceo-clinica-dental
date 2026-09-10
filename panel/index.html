@@ -765,17 +765,37 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const organico = porCanal.ORGANICO.length;
     const antiguo = porCanal.ANTIGUO.length;
     const mixMap = new Map();
-    for (const f of accP) mixMap.set(f[A_CAT], (mixMap.get(f[A_CAT]) || 0) + f[A_PAG]);
-    const mix = CATEGORIAS.map(c => ({
-      categoria: c,
-      monto: mixMap.get(c) || 0
-    }));
+    const mixPacientes = new Map();
+    for (const f of accP) {
+      mixMap.set(f[A_CAT], (mixMap.get(f[A_CAT]) || 0) + f[A_PAG]);
+      if (!mixPacientes.has(f[A_CAT])) mixPacientes.set(f[A_CAT], new Set());
+      mixPacientes.get(f[A_CAT]).add(f[A_PID]);
+    }
+    const mix = CATEGORIAS.map(c => {
+      const monto = mixMap.get(c) || 0;
+      const pacientes = mixPacientes.get(c)?.size || 0;
+      return {
+        categoria: c,
+        monto,
+        pacientes,
+        ticketPromedio: pacientes ? monto / pacientes : null
+      };
+    });
     const sumaListadas = mix.reduce((s, m) => s + m.monto, 0);
     const otras = facturacion - sumaListadas;
-    if (Math.abs(otras) > 0.5) mix.push({
-      categoria: "OTRAS (no clasificadas)",
-      monto: otras
-    });
+    if (Math.abs(otras) > 0.5) {
+      const categoriasConocidas = new Set(CATEGORIAS);
+      const pacientesOtras = new Set();
+      accP.forEach(f => {
+        if (!categoriasConocidas.has(f[A_CAT])) pacientesOtras.add(f[A_PID]);
+      });
+      mix.push({
+        categoria: "OTRAS (no clasificadas)",
+        monto: otras,
+        pacientes: pacientesOtras.size,
+        ticketPromedio: pacientesOtras.size ? otras / pacientesOtras.size : null
+      });
+    }
     mix.forEach(m => {
       m.pct = facturacion ? m.monto / facturacion : 0;
     });
@@ -2909,7 +2929,11 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, "Ingresos"), /*#__PURE__*/React.createElement("th", {
       className: "num"
-    }, "%"))), /*#__PURE__*/React.createElement("tbody", null, K.mix.filter(m => m.monto !== 0).sort((a, b) => b.monto - a.monto).map(m => /*#__PURE__*/React.createElement("tr", {
+    }, "%"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Pacientes"), /*#__PURE__*/React.createElement("th", {
+      className: "num"
+    }, "Ticket Promedio"))), /*#__PURE__*/React.createElement("tbody", null, K.mix.filter(m => m.monto !== 0).sort((a, b) => b.monto - a.monto).map(m => /*#__PURE__*/React.createElement("tr", {
       key: m.categoria
     }, /*#__PURE__*/React.createElement("td", {
       style: {
@@ -2922,7 +2946,14 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       style: {
         color: "var(--dim)"
       }
-    }, pct(m.pct)))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    }, pct(m.pct)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        color: "var(--dim)"
+      }
+    }, ent(m.pacientes)), /*#__PURE__*/React.createElement("td", {
+      className: "num"
+    }, m.ticketPromedio ? clp(m.ticketPromedio) : "\u2014"))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
       style: {
         fontWeight: 600
       }
@@ -2936,7 +2967,17 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       style: {
         fontWeight: 600
       }
-    }, "100%"))))))), /*#__PURE__*/React.createElement(SecTitle, {
+    }, "100%"), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        fontWeight: 600
+      }
+    }, ent(K.pacUnicos)), /*#__PURE__*/React.createElement("td", {
+      className: "num",
+      style: {
+        fontWeight: 600
+      }
+    }, K.pacUnicos ? clp(K.facturacion / K.pacUnicos) : "\u2014"))))))), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--mix)",
       right: /*#__PURE__*/React.createElement(SelectorRango, {
         valor: rangoCasos,
