@@ -394,7 +394,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         tipo_movimiento: String(r["Tipo de movimiento"] ?? "").trim(),
         destino: String(r["Destino"] ?? "").trim(),
         producto: String(r["Nombre producto"] ?? "").trim(),
-        precio_producto: toNumCLP(r["Precio Producto"])
+        precio_producto: toNumCLP(r["Precio Producto"]),
+        cantidad: toNumCLP(r["Salida de Inventario"]) || 1
       };
       if (!out.has(per)) out.set(per, []);
       out.get(per).push(fila);
@@ -428,8 +429,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     IN_TIPO = 2,
     IN_DEST = 3,
     IN_PROD = 4,
-    IN_PRECIO = 5;
-  const insumosToArr = r => [r.periodo, r.bodega || "", r.tipo_movimiento || "", r.destino || "", r.producto || "", Number(r.precio_producto) || 0];
+    IN_PRECIO = 5,
+    IN_CANT = 6;
+  const insumosToArr = r => [r.periodo, r.bodega || "", r.tipo_movimiento || "", r.destino || "", r.producto || "", Number(r.precio_producto) || 0, Number(r.cantidad) || 1];
 
   /* Costo de Insumos utilizados y Merma del mes: Bodega central + Salida; Merma se separa por Destino */
   function calcularInsumos(periodo, insumos) {
@@ -437,7 +439,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     let costoInsumos = 0,
       merma = 0;
     filas.forEach(f => {
-      if (String(f[IN_DEST] || "").trim().toUpperCase() === DESTINO_MERMA) merma += f[IN_PRECIO];else costoInsumos += f[IN_PRECIO];
+      const valor = f[IN_PRECIO] * (f[IN_CANT] || 1);
+      if (String(f[IN_DEST] || "").trim().toUpperCase() === DESTINO_MERMA) merma += valor;else costoInsumos += valor;
     });
     return {
       costoInsumos,
