@@ -205,13 +205,28 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   const pct = (n, d = 1) => Number.isFinite(n) ? (n * 100).toFixed(d) + "%" : "—";
   const xN = n => Number.isFinite(n) ? n.toFixed(2) + "x" : "—";
   const ent = n => Number.isFinite(n) ? Math.round(n).toLocaleString("es-CL") : "—";
+  /* Normaliza texto libre: mayúsculas, sin tildes, sin signos, espacios simples */
+  const normRef = r => String(r ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  /* Origen desde landing de Meta (protocolo recepción 14-oct-2026): "Meta Landing Ortodoncia / Implantes / Rehabilitación".
+     Tolerante: basta la palabra META o LANDING (o el código ORT-M / IMP-M / REH-M) y una palabra del tratamiento. */
+  const landingDe = r => {
+    const u = normRef(r);
+    if (!u || u.startsWith("REFERIDO")) return "";
+    const esLanding = /\bLANDING\b/.test(u) || /\bMETA\b/.test(u) || /\b(ORT|IMP|REH) M\b/.test(u);
+    if (!esLanding) return "";
+    if (/ORTO|\bORT M\b/.test(u)) return "ORTODONCIA";
+    if (/IMPLANT|\bIMP M\b/.test(u)) return "IMPLANTES";
+    if (/REHAB|\bREH M\b/.test(u)) return "REHABILITACION";
+    return /\bLANDING\b/.test(u) ? "SIN_TRAT" : "";
+  };
   const canalDe = r => {
-    const u = String(r ?? "").trim().toUpperCase();
+    const u = normRef(r);
     if (u === "REDES SOCIALES") return "META";
     if (u === "GOOGLE") return "GOOGLE";
     if (u.startsWith("REFERIDO")) return "REFERIDOS";
-    if (u === "ORGANICO" || u === "ORGÁNICO") return "ORGANICO";
+    if (u === "ORGANICO") return "ORGANICO";
     if (u === "PACIENTE ANTIGUO") return "ANTIGUO";
+    if (landingDe(r) || /\bMETA\b/.test(u)) return "META";
     return u ? "OTRO" : "";
   };
   const PIEZA_RE = /^\d+\s*:/;
@@ -720,6 +735,16 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       const c = canalDe(r[P_REF]);
       if (porCanal[c]) porCanal[c].push(r[P_PID]);
     }
+    const landingPids = {
+      ORTODONCIA: [],
+      IMPLANTES: [],
+      REHABILITACION: [],
+      SIN_TRAT: []
+    };
+    for (const r of pnP) {
+      const l = landingDe(r[P_REF]);
+      if (l) landingPids[l].push(r[P_PID]);
+    }
     const inv = inversion[per] || {
       meta: 0,
       google: 0
@@ -759,6 +784,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       return conteo;
     };
     meta.categorias = desgloseCategorias(porCanal.META);
+    meta.landings = {};
+    for (const k of Object.keys(landingPids)) meta.landings[k] = canalKpi(landingPids[k], 0);
+    meta.landingTotal = Object.values(landingPids).reduce((s, a) => s + a.length, 0);
     google.categorias = desgloseCategorias(porCanal.GOOGLE);
     const referidos = {
       pacientes: porCanal.REFERIDOS.length,
@@ -2588,7 +2616,35 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       className: "num"
     }, clp(K.meta.ingAcum)), /*#__PURE__*/React.createElement("td", {
       className: "num"
-    }, xN(K.meta.roasAcum))), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    }, xN(K.meta.roasAcum))), ...(K.meta.landingTotal > 0 ? [["ORTODONCIA", "Landing Ortodoncia"], ["IMPLANTES", "Landing Implantes"], ["REHABILITACION", "Landing Rehabilitaci\xF3n"], ["SIN_TRAT", "Landing sin tratamiento definido"]].filter(([k]) => K.meta.landings[k].pacientes > 0).map(([k, lbl]) => {
+      const L = K.meta.landings[k];
+      return /*#__PURE__*/React.createElement("tr", {
+        key: "land-" + k
+      }, /*#__PURE__*/React.createElement("td", {
+        style: {
+          color: "var(--meta)",
+          paddingLeft: 26,
+          fontSize: 12
+        }
+      }, "\u21B3 ", lbl), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, ent(L.pacientes)), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, ent(L.atendidos)), /*#__PURE__*/React.createElement("td", {
+        className: "num",
+        style: {
+          color: "var(--dim)"
+        }
+      }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, "\u2014"), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, clp(L.ingMes)), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, clp(L.ingAcum)), /*#__PURE__*/React.createElement("td", {
+        className: "num"
+      }, "\u2014"));
+    }) : []), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
       style: {
         color: "var(--goog)"
       }
