@@ -1360,8 +1360,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     }
     const grupos = new Map();
     if (hdr < 0) return { grupos, ignoradas: 0 };
-    const CAB = { "total ingresos": 1, "ingresos de explotacion": 1, "ingresos del giro": 1, "total costos": 1, "total gastos": 1 };
-    const GRUPOS = { "costos fijos": "COSTOS FIJOS", "capital humano": "CAPITAL HUMANO", "gastos administracion": "GASTOS ADMINISTRACION", "gastos financieros": "GASTOS FINANCIEROS", "otros costos": "OTROS COSTOS" };
+    const CAB = { "total ingresos": 1, "ingresos de explotacion": 1, "ingresos del giro": 1, "total costos": 1, "total gastos": 1, "margen bruto": 1, "margen operacional": 1 };
+    /* Chipax renombró "COSTOS FIJOS" como "COSTO DE VENTA" (nov-2026): se aceptan ambos nombres */
+    const GRUPOS = { "costos fijos": "COSTOS FIJOS", "costo de venta": "COSTOS FIJOS", "costo de ventas": "COSTOS FIJOS", "capital humano": "CAPITAL HUMANO", "gastos administracion": "GASTOS ADMINISTRACION", "gastos financieros": "GASTOS FINANCIEROS", "otros costos": "OTROS COSTOS" };
     let grupo = "INGRESOS", ignoradas = 0;
     for (let r = hdr + 1; r < rows.length; r++) {
       const fila = rows[r] || [];
@@ -1372,7 +1373,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       if (GRUPOS[n]) { grupo = GRUPOS[n]; continue; }
       if (n === "total otros egresos sin clasificar") { grupo = "SIN CLASIFICAR"; continue; }
       if (CAB[n]) continue;
-      if (n === "resultado operacional") { cuenta = "__RESULTADO_CHIPAX__"; g = "CONTROL"; }
+      if (n === "resultado operacional" || n === "utilidad antes de impuestos") { cuenta = "__RESULTADO_CHIPAX__"; g = "CONTROL"; }
       let alguno = false;
       cols.forEach(([i, per]) => {
         const v = fila[i];
@@ -1457,7 +1458,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const periodosEerr = Object.keys(porPeriodo).sort();
     if (!periodosEerr.length) return h(Vacio, { titulo: "SIN DATOS DE RESULTADOS", texto: "Sube el export \"Resultado Operacional\" de Chipax en la pestaña Datos para ver el estado de resultados, los márgenes y la renta estimada." });
     const E = porPeriodo[periodo];
-    if (!E) return h(Vacio, { titulo: "MES SIN ESTADO DE RESULTADOS", texto: `No hay datos de Chipax para ${pLargo(periodo)}. Meses disponibles: ${periodosEerr.map(pLabel).join(", ")}.` });
+    if (!E) return h(Vacio, { titulo: "MES SIN ESTADO DE RESULTADOS", texto: `El estado de resultados de ${pLargo(periodo)} se carga cuando Calquén cierre el mes y se revise en la reunión de cierre. Mientras tanto, selecciona un mes cerrado. Meses disponibles: ${periodosEerr.map(pLabel).join(", ")}.` });
     const anio = periodo.split("-")[0];
     const acumPers = periodosEerr.filter(p => p.startsWith(anio + "-") && p <= periodo);
     const A = { ING: 0, CV: 0, CH: 0, GA: 0, GF: 0, OC: 0, SC: 0 };
