@@ -1301,6 +1301,275 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   };
 
   /* ═══════════════════ PANTALLA DE LOGIN ═══════════════════ */
+  /* ═══════════════════ RESULTADOS: EERR por función (export de Chipax) ═══════════════════ */
+  /* Parámetros editables. Los topes son PROVISORIOS: se recalculan con el devengado real (ago–nov 2026) y luego con el presupuesto 2027. */
+  const EERR_CFG = {
+    tasaRenta: 0.125,   // Pro Pyme 14D (a confirmar con Calquén cada año)
+    ppm: 0.0025,        // PPM sobre ingresos
+    mgOpMeta: 0.08,     // margen operacional mínimo deseado
+    mgOpIdeal: 0.10,
+    provisorio: true,
+    // Tope máximo en % de los ingresos (meta 2 de cada ítem)
+    topesPct: { honorarios: 0.37, insumos: 0.04, laboratorio: 0.09, comisiones: 0.015, publicidad: 0.075, mantenimiento: 0.011, ch: 0.21, ga: 0.195, gf: 0.035 },
+    // Presupuesto mensual en $ de los ítems de costo fijo (meta 1)
+    topesFijos: { ch: 5500000, ga: 5300000, gf: 800000 },
+    // Meta de ventas mensual (devengado). Para los costos variables, presupuesto $ = tope % × meta de ventas
+    ventasMeta: { "2026-01": 30300271, "2026-02": 27954701, "2026-03": 28241040, "2026-04": 33738515, "2026-05": 26507441, "2026-06": 33417380, "2026-07": 39506180, "2026-08": 33244942, "2026-09": 27648623, "2026-10": 30391509, "2026-11": 27259932, "2026-12": 30723718 }
+  };
+  const normCuenta = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  /* [regla, categoría, clave]. La categoría manda sobre el grupo en que Chipax tenga la cuenta (ej. Servicio de Laboratorio es Costo de Ventas aunque Chipax lo muestre en Gastos de Administración) */
+  const EERR_REGLAS = [
+    [/^prestaciones medicas/, "ING", "pm"], [/^prestaciones de laboratorio/, "ING", "lab"], [/^examenes|radiograf|radriograf/, "ING", "rx"],
+    [/^venta de productos/, "ING", "prod"], [/^nc sin referencia del registro ventas/, "ING", "ncVentas"],
+    [/^honorarios/, "CV", "honorarios"], [/^insumos/, "CV", "insumos"], [/^servicio de laboratorio/, "CV", "servLab"],
+    [/^comisiones transbank/, "CV", "comTb"], [/^comisiones gerty/, "CV", "comGe"], [/^productos de venta/, "CV", "prodCosto"],
+    [/^sueldos/, "CH", "sueldos"], [/^previred/, "CH", "previred"], [/^ret\. imp/, "CH", "impUnico"], [/^cultura/, "CH", "cultura"], [/^uniformes/, "CH", "uniformes"],
+    [/^arriendo/, "GA", "arriendo"], [/^contribuciones/, "GA", "contribuciones"], [/^patentes/, "GA", "patentes"], [/^publicidad/, "GA", "publicidad"],
+    [/^agencia/, "GA", "agencia"], [/^asesoria/, "GA", "asesoria"], [/^consumo agua/, "GA", "agua"], [/^consumo luz/, "GA", "luz"],
+    [/^dosimetria/, "GA", "dosimetria"], [/^recoleccion/, "GA", "residuos"], [/^seguridad/, "GA", "seguridad"], [/^telefonia/, "GA", "telefonia"],
+    [/^software/, "GA", "software"], [/^mantenimiento/, "GA", "mantenimiento"], [/^gastos generales/, "GA", "generales"],
+    [/^comision tarjeta/, "GF", "tarjeta"], [/^comisiones bancarias/, "GF", "bancarias"], [/^intereses/, "GF", "intereses"],
+    [/^gastos no recurrentes/, "OC", "noRecurrentes"], [/^otros gastos operacionales/, "OC", "otrosOp"],
+    [/^compras sin clasificar/, "SC", "comprasSc"], [/^nc sin referencia del registro compras/, "SC", "ncCompras"]
+  ];
+  const EERR_GRUPO_CAT = { "INGRESOS": "ING", "COSTOS FIJOS": "CV", "CAPITAL HUMANO": "CH", "GASTOS ADMINISTRACION": "GA", "GASTOS FINANCIEROS": "GF", "OTROS COSTOS": "OC", "SIN CLASIFICAR": "SC" };
+  const eerrCat = (cuenta, grupo) => {
+    const n = normCuenta(cuenta);
+    for (const [re, cat, clave] of EERR_REGLAS) if (re.test(n)) return { cat, clave, mapeada: true };
+    return { cat: EERR_GRUPO_CAT[grupo] || "SC", clave: "otra:" + cuenta, mapeada: false };
+  };
+  /* Lee el export "Resultado Operacional" de Chipax (xlsx) → filas {periodo, cuenta, grupo, valor} */
+  function mapEerr(wb) {
+    const ws = wb.Sheets["Resultado Operacional"] || wb.Sheets[wb.SheetNames[0]];
+    if (!ws) return { grupos: new Map(), ignoradas: 0 };
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const aPeriodo = v => {
+      if (typeof v === "number" && v > 40000 && v < 80000) {
+        const d = XLSX.SSF.parse_date_code(v);
+        return d ? `${d.y}-${String(d.m).padStart(2, "0")}` : null;
+      }
+      const m = String(v ?? "").match(/^(\d{4})-(\d{2})/);
+      return m ? `${m[1]}-${m[2]}` : null;
+    };
+    let hdr = -1, cols = [];
+    /* La fila de encabezado es la que tiene más meses (la fila "Desde / Hasta" de arriba también trae 2 períodos en texto) */
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const c = [];
+      (rows[r] || []).forEach((v, i) => { if (i > 0) { const p = aPeriodo(v); if (p) c.push([i, p]); } });
+      if (c.length > cols.length) { hdr = r; cols = c; }
+    }
+    const grupos = new Map();
+    if (hdr < 0) return { grupos, ignoradas: 0 };
+    const CAB = { "total ingresos": 1, "ingresos de explotacion": 1, "ingresos del giro": 1, "total costos": 1, "total gastos": 1 };
+    const GRUPOS = { "costos fijos": "COSTOS FIJOS", "capital humano": "CAPITAL HUMANO", "gastos administracion": "GASTOS ADMINISTRACION", "gastos financieros": "GASTOS FINANCIEROS", "otros costos": "OTROS COSTOS" };
+    let grupo = "INGRESOS", ignoradas = 0;
+    for (let r = hdr + 1; r < rows.length; r++) {
+      const fila = rows[r] || [];
+      const nombre = String(fila[0] ?? "").trim();
+      if (!nombre) continue;
+      const n = normCuenta(nombre);
+      let cuenta = nombre, g = grupo;
+      if (GRUPOS[n]) { grupo = GRUPOS[n]; continue; }
+      if (n === "total otros egresos sin clasificar") { grupo = "SIN CLASIFICAR"; continue; }
+      if (CAB[n]) continue;
+      if (n === "resultado operacional") { cuenta = "__RESULTADO_CHIPAX__"; g = "CONTROL"; }
+      let alguno = false;
+      cols.forEach(([i, per]) => {
+        const v = fila[i];
+        if (v === null || v === undefined || v === "") return;
+        alguno = true;
+        if (!grupos.has(per)) grupos.set(per, []);
+        grupos.get(per).push({ periodo: per, cuenta, grupo: g, valor: toNum(v) });
+      });
+      if (!alguno) ignoradas++;
+    }
+    return { grupos, ignoradas };
+  }
+  /* Calcula el EERR de un mes. Los costos vienen negativos (como en Chipax). */
+  function calcularEerr(filas) {
+    const E = { ING: 0, CV: 0, CH: 0, GA: 0, GF: 0, OC: 0, SC: 0, claves: {}, sinMapear: [], ctrl: null };
+    (filas || []).forEach(f => {
+      const v = Number(f.valor) || 0;
+      if (f.cuenta === "__RESULTADO_CHIPAX__") { E.ctrl = v; return; }
+      const { cat, clave, mapeada } = eerrCat(f.cuenta, f.grupo);
+      E[cat] += v;
+      E.claves[clave] = (E.claves[clave] || 0) + v;
+      if (!mapeada) E.sinMapear.push(f.cuenta);
+    });
+    E.mb = E.ING + E.CV;
+    E.mo = E.mb + E.CH + E.GA;
+    E.uai = E.mo + E.GF + E.OC + E.SC;
+    E.k = k => E.claves[k] || 0;
+    return E;
+  }
+  /* Renta estimada (acumulada del año): tasa × utilidad antes de impuestos acumulada, nunca negativa. El mes es la variación del acumulado. */
+  function calcularRenta(eerrPorPeriodo, periodo) {
+    const [a] = periodo.split("-");
+    const pers = Object.keys(eerrPorPeriodo).filter(p => p.startsWith(a + "-") && p <= periodo).sort();
+    const acum = (hasta) => pers.filter(p => p <= hasta).reduce((s, p) => s + eerrPorPeriodo[p].uai, 0);
+    const rentaAcum = Math.max(0, acum(periodo)) * EERR_CFG.tasaRenta;
+    const prev = pers.filter(p => p < periodo).pop();
+    const rentaPrev = prev ? Math.max(0, acum(prev)) * EERR_CFG.tasaRenta : 0;
+    const ingAcum = pers.reduce((s, p) => s + eerrPorPeriodo[p].ING, 0);
+    const ppmAcum = ingAcum * EERR_CFG.ppm;
+    return { uaiAcum: acum(periodo), rentaAcum, rentaMes: rentaAcum - rentaPrev, ppmAcum, porPagar: rentaAcum - ppmAcum, despuesImpAcum: acum(periodo) - rentaAcum, meses: pers.length };
+  }
+  /* Líneas de costo con dos metas: presupuesto en $ y tope en % de los ingresos */
+  const EERR_LINEAS = [
+    { id: "honorarios", n: "Honorarios doctores", tipo: "var", valor: E => -E.k("honorarios") },
+    { id: "insumos", n: "Insumos médicos", tipo: "var", valor: E => -E.k("insumos") },
+    { id: "laboratorio", n: "Servicio de laboratorio", tipo: "var", valor: E => -E.k("servLab") },
+    { id: "comisiones", n: "Comisiones Transbank y Gerty", tipo: "var", valor: E => -(E.k("comTb") + E.k("comGe")) },
+    { id: "ch", n: "Capital humano", tipo: "fijo", valor: E => -E.CH },
+    { id: "ga", n: "Gastos de administración", tipo: "fijo", valor: E => -E.GA },
+    { id: "publicidad", n: "· Publicidad (pautas)", tipo: "var", valor: E => -E.k("publicidad"), dentro: true },
+    { id: "mantenimiento", n: "· Mantenimiento", tipo: "var", valor: E => -E.k("mantenimiento"), dentro: true },
+    { id: "gf", n: "Costos financieros", tipo: "fijo", valor: E => -E.GF }
+  ];
+  /* Diagnóstico: separa "gasto sobre presupuesto" de "ventas bajo meta", que es lo que el % solo no distingue */
+  function diagnosticoEerr({ tipo, real, ppto, pctReal, tope, ventas, ventasMeta }) {
+    const sobrePct = Number.isFinite(pctReal) && pctReal > tope + 1e-9;
+    const sobreUsd = ppto !== null && real > ppto + 1;
+    const ventasBajas = ventasMeta ? ventas < ventasMeta * 0.97 : false;
+    if (tipo === "fijo") {
+      if (sobreUsd) return { t: "Gasto sobre presupuesto", e: "bad" };
+      if (sobrePct) return { t: ventasBajas ? "Gasto en presupuesto; el % sube por ventas bajo meta" : "Sobre el tope en %", e: "warn" };
+      return { t: "En orden", e: "ok" };
+    }
+    if (sobrePct && sobreUsd) return { t: ventasBajas ? "Ambos: gasto sobre presupuesto y ventas bajo meta" : "Gasto sobre presupuesto", e: "bad" };
+    if (sobrePct) return { t: ventasBajas ? "Ventas bajo meta: gasto en presupuesto, pero el % se pasó" : "Sobre el tope en %", e: "warn" };
+    if (sobreUsd) return { t: "Más gasto en $, dentro del tope (más ventas)", e: "ok" };
+    return { t: "En orden", e: "ok" };
+  }
+  const eM = n => n === null || n === undefined || !Number.isFinite(n) ? "—" : (n < 0 ? "−" : "") + "$" + Math.abs(Math.round(n)).toLocaleString("es-CL");
+  const eP = (n, d = 1) => Number.isFinite(n) ? (n * 100).toFixed(d).replace(".", ",") + "%" : "—";
+  const eColor = e => e === "ok" ? "var(--ok)" : e === "bad" ? "var(--bad)" : e === "warn" ? "var(--warn)" : "var(--dim)";
+  function ResultadosTab({ periodo, eerrRows, cmi }) {
+    const h = React.createElement;
+    const [vista, setVista] = useState("mes");
+    const porPeriodo = useMemo(() => {
+      const g = {};
+      (eerrRows || []).forEach(f => { (g[f.periodo] = g[f.periodo] || []).push(f); });
+      const out = {};
+      Object.keys(g).forEach(p => { out[p] = calcularEerr(g[p]); });
+      return out;
+    }, [eerrRows]);
+    const periodosEerr = Object.keys(porPeriodo).sort();
+    if (!periodosEerr.length) return h(Vacio, { titulo: "SIN DATOS DE RESULTADOS", texto: "Sube el export \"Resultado Operacional\" de Chipax en la pestaña Datos para ver el estado de resultados, los márgenes y la renta estimada." });
+    const E = porPeriodo[periodo];
+    if (!E) return h(Vacio, { titulo: "MES SIN ESTADO DE RESULTADOS", texto: `No hay datos de Chipax para ${pLargo(periodo)}. Meses disponibles: ${periodosEerr.map(pLabel).join(", ")}.` });
+    const anio = periodo.split("-")[0];
+    const acumPers = periodosEerr.filter(p => p.startsWith(anio + "-") && p <= periodo);
+    const A = { ING: 0, CV: 0, CH: 0, GA: 0, GF: 0, OC: 0, SC: 0 };
+    acumPers.forEach(p => Object.keys(A).forEach(k => { A[k] += porPeriodo[p][k]; }));
+    A.mb = A.ING + A.CV; A.mo = A.mb + A.CH + A.GA; A.uai = A.mo + A.GF + A.OC + A.SC;
+    const R = calcularRenta(porPeriodo, periodo);
+    const S = vista === "mes" ? { ING: E.ING, CV: E.CV, CH: E.CH, GA: E.GA, GF: E.GF, OC: E.OC, SC: E.SC, mb: E.mb, mo: E.mo, uai: E.uai } : A;
+    const rentaVista = vista === "mes" ? R.rentaMes : R.rentaAcum;
+    const sumaClaves = fn => vista === "mes" ? fn(E) : acumPers.reduce((s, p) => s + fn(porPeriodo[p]), 0);
+    const mgOp = E.ING ? E.mo / E.ING : null;
+    const estMg = mgOp === null ? null : mgOp >= EERR_CFG.mgOpMeta ? "ok" : mgOp >= 0.05 ? "warn" : "bad";
+    const equilibrio = E.mb > 0 && E.ING ? -(E.CH + E.GA) / (E.mb / E.ING) : null;
+    /* — tabla del estado de resultados — */
+    const filasEerr = [
+      { n: "Ingresos", v: S.ING, tipo: "sec" },
+      { n: "Prestaciones médicas", v: sumaClaves(x => x.k("pm")), tipo: "sub" },
+      { n: "Prestaciones de laboratorio", v: sumaClaves(x => x.k("lab")), tipo: "sub" },
+      { n: "Exámenes (radiografías)", v: sumaClaves(x => x.k("rx")), tipo: "sub" },
+      { n: "Venta de productos", v: sumaClaves(x => x.k("prod")), tipo: "sub" },
+      { n: "Costo de ventas", v: S.CV, tipo: "sec" },
+      { n: "Honorarios doctores", v: sumaClaves(x => x.k("honorarios")), tipo: "sub" },
+      { n: "Insumos médicos", v: sumaClaves(x => x.k("insumos")), tipo: "sub" },
+      { n: "Servicio de laboratorio", v: sumaClaves(x => x.k("servLab")), tipo: "sub" },
+      { n: "Comisiones Transbank y Gerty", v: sumaClaves(x => x.k("comTb") + x.k("comGe")), tipo: "sub" },
+      { n: "Margen bruto", v: S.mb, tipo: "tot" },
+      { n: "Capital humano", v: S.CH, tipo: "sec" },
+      { n: "Gastos de administración", v: S.GA, tipo: "sec" },
+      { n: "Margen operacional", v: S.mo, tipo: "tot" },
+      { n: "Costos financieros", v: S.GF, tipo: "sec" },
+      { n: "Otros costos y partidas sin clasificar", v: S.OC + S.SC, tipo: "sec" },
+      { n: "Utilidad antes de impuestos", v: S.uai, tipo: "tot" },
+      { n: "Renta estimada (" + eP(EERR_CFG.tasaRenta) + ")", v: -rentaVista, tipo: "sub" },
+      { n: "Resultado después de impuestos", v: S.uai - rentaVista, tipo: "tot" }
+    ];
+    const celda = (txt, extra) => h("td", { className: "mono", style: { padding: "7px 10px", textAlign: "right", whiteSpace: "nowrap", fontSize: 12.5, ...extra } }, txt);
+    const tablaEerr = h("table", { style: { width: "100%", borderCollapse: "collapse" } },
+      h("thead", null, h("tr", null, ["", vista === "mes" ? pLargo(periodo) : "Acumulado " + anio, "% ingresos"].map((t, i) =>
+        h("th", { key: i, style: { textAlign: i ? "right" : "left", padding: "8px 10px", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--dim)", borderBottom: "1px solid var(--line)" } }, t)))),
+      h("tbody", null, filasEerr.map((f, i) => h("tr", { key: i, style: { borderBottom: "1px solid #202024", background: f.tipo === "tot" ? "rgba(255,255,255,.04)" : "transparent" } },
+        h("td", { style: { padding: "7px 10px", paddingLeft: f.tipo === "sub" ? 26 : 10, fontSize: f.tipo === "tot" ? 13.5 : 12.5, fontWeight: f.tipo === "tot" ? 700 : 400, color: f.tipo === "sub" ? "var(--dim)" : "var(--bone)" } }, f.n),
+        celda(eM(f.v), { fontWeight: f.tipo === "tot" ? 700 : 400, color: f.tipo === "tot" && f.v < 0 ? "var(--bad)" : undefined }),
+        celda(S.ING ? eP(f.v / S.ING) : "—", { color: "var(--dim)" })))));
+    /* — control de topes: meta $ y meta % por separado — */
+    const ventasMes = E.ING;
+    const ventasMetaMes = EERR_CFG.ventasMeta[periodo] || null;
+    const lineasCtl = EERR_LINEAS.map(L => {
+      const tope = EERR_CFG.topesPct[L.id];
+      const pers = vista === "mes" ? [periodo] : acumPers;
+      const real = pers.reduce((s, p) => s + L.valor(porPeriodo[p]), 0);
+      const ventas = pers.reduce((s, p) => s + porPeriodo[p].ING, 0);
+      const metaV = pers.every(p => EERR_CFG.ventasMeta[p]) ? pers.reduce((s, p) => s + EERR_CFG.ventasMeta[p], 0) : null;
+      let ppto = null;
+      if (L.tipo === "fijo") ppto = EERR_CFG.topesFijos[L.id] * pers.length;
+      else if (metaV) ppto = tope * metaV;
+      const pctReal = ventas ? real / ventas : null;
+      const dg = diagnosticoEerr({ tipo: L.tipo, real, ppto, pctReal, tope, ventas, ventasMeta: metaV });
+      return { L, tope, real, ppto, pctReal, dg };
+    });
+    const th = (t, i) => h("th", { key: i, style: { textAlign: i ? "right" : "left", padding: "8px 10px", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--dim)", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" } }, t);
+    const tablaCtl = h("div", { style: { overflowX: "auto" } }, h("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 860 } },
+      h("thead", null, h("tr", null, ["Línea", "Real $", "Presupuesto $", "Desv. $", "Real %", "Tope %", "Desv. pp", "Diagnóstico"].map(th))),
+      h("tbody", null, lineasCtl.map(({ L, tope, real, ppto, pctReal, dg }) => h("tr", { key: L.id, style: { borderBottom: "1px solid #202024" } },
+        h("td", { style: { padding: "7px 10px", fontSize: 12.5, color: L.dentro ? "var(--dim)" : "var(--bone)", paddingLeft: L.dentro ? 26 : 10 } }, L.n),
+        celda(eM(real)),
+        celda(ppto === null ? "—" : eM(ppto), { color: "var(--dim)" }),
+        celda(ppto === null ? "—" : eM(real - ppto), { color: ppto !== null && real > ppto + 1 ? "var(--bad)" : "var(--ok)" }),
+        celda(eP(pctReal, 2)),
+        celda(eP(tope, 2), { color: "var(--dim)" }),
+        celda(Number.isFinite(pctReal) ? ((pctReal - tope) * 100 >= 0 ? "+" : "−") + Math.abs((pctReal - tope) * 100).toFixed(2).replace(".", ",") : "—", { color: Number.isFinite(pctReal) && pctReal > tope ? "var(--bad)" : "var(--ok)" }),
+        h("td", { style: { padding: "7px 10px", fontSize: 11.5, color: eColor(dg.e), fontWeight: 500 } }, dg.t))))));
+    /* — controles de calidad contra el devengado del CMI — */
+    const cmiOk = cmi && Number.isFinite(cmi.facturacion);
+    const dif = (a, b) => Number.isFinite(a) && Number.isFinite(b) ? a - b : null;
+    const ctlFilas = [
+      { n: "Utilidad antes de impuestos vs \"Resultado Operacional\" de Chipax", a: E.uai, b: E.ctrl, tol: 1 },
+      cmiOk && { n: "Ingresos: Chipax vs facturación devengada del CMI", a: E.ING, b: cmi.facturacion, tol: 0.005 },
+      cmiOk && { n: "Honorarios: Chipax vs honorarios del CMI", a: -E.k("honorarios"), b: cmi.honorarios, tol: 0.005 },
+      cmiOk && { n: "Insumos: Chipax vs consumo del CMI", a: -E.k("insumos"), b: cmi.insumos, tol: 0.02 },
+      cmiOk && { n: "Pautas: Chipax vs Meta + Google del CMI", a: -E.k("publicidad"), b: cmi.pautas, tol: 0.02 }
+    ].filter(Boolean);
+    const tablaCalidad = h("div", null, ctlFilas.map((f, i) => {
+      const d = dif(f.a, f.b);
+      const rel = f.b ? Math.abs(d) / Math.abs(f.b) : (d ? 1 : 0);
+      const ok = d !== null && (f.tol >= 1 ? Math.abs(d) <= f.tol : rel <= f.tol);
+      return h(Row, { key: i, label: f.n, hint: `Chipax ${eM(f.a)} · referencia ${eM(f.b)}`, value: d === null ? "—" : eM(d), meta: d === null ? "sin dato" : ok ? "cuadra" : "revisar", estado: d === null ? null : ok ? "ok" : "bad" });
+    }), E.sinMapear.length > 0 && h(Row, { label: "Cuentas de Chipax sin regla de clasificación", hint: [...new Set(E.sinMapear)].join(", "), value: String(new Set(E.sinMapear).size), meta: "se clasificaron por su grupo en Chipax", estado: "warn" }));
+    return h(React.Fragment, null,
+      h(SecTitle, { color: "var(--op)", right: h("div", { style: { display: "flex", gap: 6 } }, ["mes", "acum"].map(v => h(Boton, { key: v, chico: true, tono: vista === v ? "claro" : undefined, onClick: () => setVista(v) }, v === "mes" ? "Mes" : "Acumulado año"))) }, "RESULTADOS"),
+      EERR_CFG.provisorio && h("div", { style: { fontSize: 11, color: "var(--warn)", marginBottom: 14 } }, "Topes provisorios: se recalculan con el cierre de noviembre y luego con el presupuesto 2027. Ventas meta de referencia: presupuesto reajustado 2026."),
+      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14, marginBottom: 28 } },
+        h(Metric, { label: "Margen bruto", value: eP(E.ING ? E.mb / E.ING : null), sub: `${eM(E.mb)} · ingresos ${eM(E.ING)}` }),
+        h(Metric, { label: "Margen operacional", value: eP(mgOp), estado: estMg, meta: `meta ${eP(EERR_CFG.mgOpMeta, 0)} a ${eP(EERR_CFG.mgOpIdeal, 0)}`, sub: eM(E.mo) }),
+        h(Metric, { label: "Utilidad antes de impuestos", value: clpK(E.uai), sub: `${eM(E.uai)} · ${eP(E.ING ? E.uai / E.ING : null)} de ingresos` }),
+        h(Metric, { label: "Renta estimada", value: clpK(R.rentaMes), sub: `mes · acumulado ${eM(R.rentaAcum)} (${eP(EERR_CFG.tasaRenta)})` }),
+        h(Metric, { label: "Punto de equilibrio operativo", value: clpK(equilibrio), estado: equilibrio === null ? null : ventasMes >= equilibrio ? "ok" : "bad", meta: "ventas que cubren capital humano y administración", sub: `ventas del mes ${eM(ventasMes)}` })),
+      h(SecTitle, { color: "var(--op)" }, "ESTADO DE RESULTADOS POR FUNCIÓN"),
+      h(Panel, { style: { padding: "6px 8px", marginBottom: 28, overflowX: "auto" } }, tablaEerr),
+      h(SecTitle, { color: "var(--gestion)" }, "CONTROL DE TOPES: GASTO EN $ Y % SOBRE VENTAS"),
+      h("div", { style: { fontSize: 11.5, color: "var(--dim)", marginBottom: 12, lineHeight: 1.55 } }, "Cada línea tiene dos metas: el presupuesto en pesos y el tope como % de los ingresos. Si las ventas caen, el gasto puede estar dentro del presupuesto y aun así pasarse del tope; el diagnóstico lo separa."),
+      h(Panel, { style: { padding: "6px 8px", marginBottom: 28 } }, tablaCtl),
+      h(SecTitle, { color: "var(--meta)" }, "RENTA ESTIMADA"),
+      h(Panel, { style: { padding: "8px 18px", marginBottom: 8 } },
+        h(Row, { label: `Utilidad antes de impuestos acumulada ${anio}`, hint: `${R.meses} mes(es) cargados`, value: eM(R.uaiAcum) }),
+        h(Row, { label: `Renta estimada acumulada (${eP(EERR_CFG.tasaRenta)})`, hint: "Cero si el acumulado es negativo", value: eM(R.rentaAcum) }),
+        h(Row, { label: "Renta del mes (variación del acumulado)", hint: "Puede ser negativa: revierte renta ya provisionada", value: eM(R.rentaMes) }),
+        h(Row, { label: `PPM acumulado (${eP(EERR_CFG.ppm, 2)} de ingresos)`, hint: "Pago a cuenta de la renta; no es costo", value: eM(R.ppmAcum) }),
+        h(Row, { label: "Renta por pagar estimada (abril)", hint: "Renta acumulada menos PPM; negativo = saldo a favor", value: eM(R.porPagar), meta: R.porPagar > 0 ? "a pagar" : "a favor", estado: R.porPagar > 0 ? "warn" : "ok" }),
+        h(Row, { label: "Resultado después de impuestos acumulado", value: eM(R.despuesImpAcum) })),
+      h("div", { style: { fontSize: 11, color: "var(--dim)", marginBottom: 28, lineHeight: 1.55 } }, "Es una estimación sobre la utilidad contable. La base tributaria real puede diferir (depreciación, gastos rechazados, pérdidas anteriores); Calquén la ajusta al cierre."),
+      h(SecTitle, { color: "var(--bone)" }, "CONTROLES DE CALIDAD"),
+      h(Panel, { style: { padding: "8px 18px", marginBottom: 28 } }, tablaCalidad));
+  }
   function Login({
     onLogin
   }) {
@@ -1452,12 +1721,13 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const [insumos, setInsumos] = useState([]);
     const [costosProductos, setCostosProductos] = useState([]);
     const [presupuestos, setPresupuestos] = useState([]);
+    const [eerrRows, setEerrRows] = useState([]);
     const [vigenciaSubida, setVigenciaSubida] = useState("");
     const [ventanaAudiencia, setVentanaAudiencia] = useState(2);
     const [periodo, setPeriodo] = useState(null);
     const [tab, setTab] = useState("resumen");
     useEffect(() => {
-      if (tab === "datos" && !esAdmin) setTab("resumen");
+      if ((tab === "datos" || tab === "resultados") && !esAdmin) setTab("resumen");
     }, [tab, esAdmin]);
     const [rangoFacturacion, setRangoFacturacion] = useState("12");
     const [rangoIngresoEfectivo, setRangoIngresoEfectivo] = useState("12");
@@ -1473,7 +1743,8 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       refPg = useRef(null),
       refIn = useRef(null),
       refCp = useRef(null),
-      refPr = useRef(null);
+      refPr = useRef(null),
+      refEe = useRef(null);
     const notificar = (tipo, texto) => {
       setAviso({
         tipo,
@@ -1497,7 +1768,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       return todas;
     };
     const cargarTodo = async () => {
-      const [da, dp, df, di, dpg, dins, dcp, dpr] = await Promise.all([
+      const [da, dp, df, di, dpg, dins, dcp, dpr, dee] = await Promise.all([
         traerTodasLasFilas("cmi_acciones", "*"),
         traerTodasLasFilas("cmi_pacientes_nuevos", "*"),
         traerTodasLasFilas("cmi_afiliados", "rut"),
@@ -1506,6 +1777,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         traerTodasLasFilas("cmi_insumos", "*"),
         traerTodasLasFilas("cmi_costos_productos", "*"),
         traerTodasLasFilas("cmi_presupuestos", "*"),
+        traerTodasLasFilas("cmi_eerr", "*"),
       ]);
       setAcc((da || []).map(accToArr));
       setPn((dp || []).map(pnToArr));
@@ -1514,6 +1786,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       setInsumos((dins || []).map(insumosToArr));
       setCostosProductos((dcp || []).map(costosProductosToArr));
       setPresupuestos((dpr || []).map(presupuestosToArr));
+      setEerrRows((dee || []).map(r => ({ periodo: r.periodo, cuenta: r.cuenta, grupo: r.grupo, valor: Number(r.valor) || 0 })));
       const invObj = {};
       (di || []).forEach(r => {
         invObj[r.periodo] = {
@@ -1913,12 +2186,57 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       }
       setCargando(false);
     };
+    /* — Subir Resultado Operacional de Chipax (xlsx) — estado de resultados por cuenta y mes — */
+    const subirEerr = file => {
+      setCargando(true);
+      const rd = new FileReader();
+      rd.onload = async ev => {
+        try {
+          const wb = XLSX.read(ev.target.result, { type: "array" });
+          const { grupos, ignoradas } = mapEerr(wb);
+          if (!grupos.size) {
+            notificar("error", "Ese archivo no parece el export Resultado Operacional de Chipax: no encontré columnas de meses.");
+            setCargando(false);
+            return;
+          }
+          const pers = [...grupos.keys()].sort();
+          for (const per of pers) {
+            const { error } = await sb.from("cmi_eerr").delete().eq("periodo", per);
+            if (error) throw error;
+          }
+          for (const per of pers) {
+            const filas = grupos.get(per);
+            for (let i = 0; i < filas.length; i += 500) {
+              const { error } = await sb.from("cmi_eerr").insert(filas.slice(i, i + 500));
+              if (error) throw error;
+            }
+          }
+          await cargarTodo();
+          const descuadres = pers.filter(per => {
+            const E = calcularEerr(grupos.get(per));
+            return E.ctrl !== null && Math.abs(E.uai - E.ctrl) > 1;
+          });
+          if (descuadres.length) notificar("error", `Resultados cargados (${pers.map(pLabel).join(", ")}), pero la utilidad no cuadra con el Resultado Operacional de Chipax en: ${descuadres.map(pLabel).join(", ")}. Revisa la pestaña Resultados.`);
+          else notificar("ok", `Resultados cargados: ${pers.map(pLabel).join(", ")}. Utilidad cuadrada con Chipax.${ignoradas ? ` ${ignoradas} filas sin valores se omitieron.` : ""}`);
+        } catch (e) {
+          const msg = String(e.message || e);
+          notificar("error", "No se pudo guardar el estado de resultados: " + msg + (msg.includes("cmi_eerr") ? " (falta crear la tabla cmi_eerr en Supabase: ejecuta schema_eerr.sql)" : ""));
+        }
+        setCargando(false);
+      };
+      rd.onerror = () => {
+        notificar("error", "No se pudo leer el archivo.");
+        setCargando(false);
+      };
+      rd.readAsArrayBuffer(file);
+    };
     const borrarPeriodo = async per => {
       await sb.from("cmi_acciones").delete().eq("periodo", per);
       await sb.from("cmi_pacientes_nuevos").delete().eq("periodo", per);
       await sb.from("cmi_pagos").delete().eq("periodo", per);
       await sb.from("cmi_insumos").delete().eq("periodo", per);
       await sb.from("cmi_presupuestos").delete().eq("periodo", per);
+      await sb.from("cmi_eerr").delete().eq("periodo", per);
       await cargarTodo();
       notificar("ok", `${pLargo(per)} eliminado.`);
     };
@@ -1966,6 +2284,10 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       id: "gestion",
       n: "Gesti\xF3n",
       c: "var(--gestion)"
+    }, {
+      id: "resultados",
+      n: "Resultados",
+      c: "var(--op)"
     }, {
       id: "publicidad",
       n: "Publicidad",
@@ -2112,7 +2434,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         gap: 2,
         overflowX: "auto"
       }
-    }, TABS.filter(t => t.id !== "datos" || esAdmin).map(t => /*#__PURE__*/React.createElement("button", {
+    }, TABS.filter(t => (t.id !== "datos" && t.id !== "resultados") || esAdmin).map(t => /*#__PURE__*/React.createElement("button", {
       key: t.id,
       onClick: () => setTab(t.id),
       style: {
@@ -3680,7 +4002,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       value: pct(pctInversionPautas, 2),
       sub: `${clp((ivPeriodo.meta || 0) + (ivPeriodo.google || 0))} en Meta + Google \xB7 l\xEDmite 8%`,
       estado: estMax(pctInversionPautas, 0.08)
-    }))), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
+    }))), tab === "resultados" && esAdmin && periodo && React.createElement(ResultadosTab, { periodo: periodo, eerrRows: eerrRows, cmi: K ? { facturacion: K.facturacion, honorarios: K.honorarios, insumos: insumosCalc.costoInsumos, pautas: (ivPeriodo.meta || 0) + (ivPeriodo.google || 0) } : null }), tab === "datos" && esAdmin && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--bone)"
     }, "CARGAR ARCHIVOS"), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3732,6 +4054,14 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
       fn: subirPresupuestos,
       n: presupuestos.length,
       u: "filas"
+    }, {
+      t: "Resultado Operacional (Chipax)",
+      d: "Estado de resultados por cuenta y mes, export directo de Chipax (.xlsx). Reemplaza los meses que traiga el archivo. Alimenta la pestaña Resultados.",
+      r: refEe,
+      fn: subirEerr,
+      n: eerrRows.length,
+      u: "cuentas-mes",
+      accept: ".xlsx"
     }].map(c => /*#__PURE__*/React.createElement(Panel, {
       key: c.t,
       style: {
