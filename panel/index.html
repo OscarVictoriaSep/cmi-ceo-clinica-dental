@@ -207,28 +207,53 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
   const ent = n => Number.isFinite(n) ? Math.round(n).toLocaleString("es-CL") : "—";
   /* Normaliza texto libre: mayúsculas, sin tildes, sin signos, espacios simples */
   const normRef = r => String(r ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  /* Distancia de edición (tolera errores de tipeo en la Referencia, p. ej. "redes socilaes") */
+  const lev = (a, b) => {
+    if (a === b) return 0;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length];
+  };
   /* Origen desde landing de Meta (protocolo recepción 14-oct-2026): "Meta Landing Ortodoncia / Implantes / Rehabilitación".
-     Tolerante: basta la palabra META o LANDING (o el código ORT-M / IMP-M / REH-M) y una palabra del tratamiento. */
+     Tolerante: basta la palabra META o LANDING (o el código ORT-M / IMP-M / REH-M) y una palabra del tratamiento, aunque tenga errores de tipeo. */
   const landingDe = r => {
     const u = normRef(r);
-    if (!u || u.startsWith("REFERIDO")) return "";
-    const esLanding = /\bLANDING\b/.test(u) || /\bMETA\b/.test(u) || /\b(ORT|IMP|REH) M\b/.test(u);
+    if (!u || u.startsWith("REFERID")) return "";
+    const toks = u.split(" ").filter(t => t.length >= 4);
+    const cerca = (w, d) => toks.some(t => lev(t, w) <= d);
+    const esLanding = /\bLANDING\b/.test(u) || /\bMETA\b/.test(u) || /\b(ORT|IMP|REH) M\b/.test(u) || cerca("LANDING", 2);
     if (!esLanding) return "";
-    if (/ORTO|\bORT M\b/.test(u)) return "ORTODONCIA";
-    if (/IMPLANT|\bIMP M\b/.test(u)) return "IMPLANTES";
-    if (/REHAB|\bREH M\b/.test(u)) return "REHABILITACION";
-    return /\bLANDING\b/.test(u) ? "SIN_TRAT" : "";
+    if (/ORTO|\bORT M\b/.test(u) || cerca("ORTODONCIA", 3)) return "ORTODONCIA";
+    if (/IMPLANT|\bIMP M\b/.test(u) || cerca("IMPLANTES", 2)) return "IMPLANTES";
+    if (/REHAB|\bREH M\b/.test(u) || cerca("REHABILITACION", 3)) return "REHABILITACION";
+    return /\bMETA\b/.test(u) && !/\bLANDING\b/.test(u) && !cerca("LANDING", 2) ? "" : "SIN_TRAT";
   };
-  const canalDe = r => {
+  const ORIGEN_ESTANDAR = new Set(["REDES SOCIALES", "GOOGLE", "ORGANICO", "PACIENTE ANTIGUO", "META LANDING ORTODONCIA", "META LANDING IMPLANTES", "META LANDING REHABILITACION"]);
+  /* Clasifica el texto libre de "Referencia Paciente": normaliza (mayúsculas, tildes, signos) y aplica coincidencia aproximada.
+     canal "OTRO" = texto no reconocido; estandar=false = se entendió pero está escrito distinto al valor oficial (alerta de origen). */
+  const clasificarOrigen = r => {
     const u = normRef(r);
-    if (u === "REDES SOCIALES") return "META";
-    if (u === "GOOGLE") return "GOOGLE";
-    if (u.startsWith("REFERIDO")) return "REFERIDOS";
-    if (u === "ORGANICO") return "ORGANICO";
-    if (u === "PACIENTE ANTIGUO") return "ANTIGUO";
-    if (landingDe(r) || /\bMETA\b/.test(u)) return "META";
-    return u ? "OTRO" : "";
+    if (!u) return { canal: "", estandar: true, landing: "" };
+    const t = u.split(" ")[0];
+    const dos = u.split(" ").slice(0, 2).join(" ");
+    const landing = landingDe(r);
+    let canal = "OTRO";
+    if (u.startsWith("REFERID") || lev(t, "REFERIDO") <= 2 || lev(t, "REFERIDOS") <= 2) canal = "REFERIDOS";
+    else if (landing) canal = "META";
+    else if (lev(dos, "REDES SOCIALES") <= 3 || /^REDES\b/.test(u) || t === "RRSS") canal = "META";
+    else if (u.split(" ").some(tk => ["IG", "FB", "INSTA", "FACE"].includes(tk) || (tk.length >= 6 && (lev(tk, "INSTAGRAM") <= 2 || lev(tk, "FACEBOOK") <= 2)))) canal = "META";
+    else if (lev(t, "GOOGLE") <= 1) canal = "GOOGLE";
+    else if (lev(t, "ORGANICO") <= 2 || lev(t, "ORGANICA") <= 2) canal = "ORGANICO";
+    else if (/^PACIENTE ANT/.test(u) || lev(u, "PACIENTE ANTIGUO") <= 3) canal = "ANTIGUO";
+    else if (/\bMETA\b/.test(u)) canal = "META";
+    const estandar = canal === "REFERIDOS" ? true : ORIGEN_ESTANDAR.has(u);
+    return { canal, estandar, landing: canal === "META" ? landing : "" };
   };
+  const canalDe = r => clasificarOrigen(r).canal;
   const PIEZA_RE = /^\d+\s*:/;
   const esImplanteValido = prest => {
     const p = String(prest ?? "").toLowerCase();
@@ -254,6 +279,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     A_MAIL = 12;
   const P_PER = 0,
     P_PID = 1,
+    P_FEC = 3,
     P_REF = 4,
     P_CEL = 5,
     P_MAIL = 6;
@@ -314,6 +340,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         pid,
         rut: normRut(r["RUT Paciente"]),
         referencia: String(r["Referencia Paciente"] ?? "").trim().toUpperCase(),
+        fecha_afiliacion: isoFecha(r["Fecha de afiliación"] ?? r["\uFEFFFecha de afiliación"]),
         celular: String(r["Celular"] ?? "").trim(),
         email: String(r["E-Mail"] ?? "").trim()
       };
@@ -423,7 +450,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
 
   /* Convierte filas de Supabase (objetos con nombre de columna) a arreglos compactos internos */
   const accToArr = r => [r.pid, r.rut || "", r.periodo, r.fecha || "", r.prestacion || "", Number(r.pagado) || 0, r.convenio || "", r.categoria || "", r.tratamiento || "", r.pieza || "", r.doctor || "", Number(r.honorario) || 0, r.email || ""];
-  const pnToArr = r => [r.periodo, r.pid, r.rut || "", "", r.referencia || "", r.celular || "", r.email || ""];
+  const pnToArr = r => [r.periodo, r.pid, r.rut || "", r.fecha_afiliacion || "", r.referencia || "", r.celular || "", r.email || ""];
   const pagosToArr = r => [r.periodo, r.pago_id || "", r.pid || "", r.prestacion || "", r.realizado || "", Number(r.pagado_prestacion) || 0, Number(r.abono_libre) || 0, r.medio_pago || ""];
   const PR_PER = 0,
     PR_PID = 1,
@@ -654,6 +681,196 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     if (cat === "REHABILITACIÓN ORAL") return "REHABILITACION";
     return "OTROS";
   };
+  /* ═══════════════════ ORIGEN: CALIDAD DEL DATO, BENEFICIO ORTODONCIA, ATENCIÓN Y TIEMPOS ═══════════════════ */
+  const sinTildes = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  /* Normaliza fechas de Dentalink (yyyy-mm-dd o dd/mm/yyyy) a yyyy-mm-dd; "" si no se reconoce */
+  const isoFecha = s => {
+    const t = String(s ?? "").trim();
+    let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = t.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    return "";
+  };
+  const diasEntre = (hasta, desde) => {
+    const a = Date.parse(hasta + "T00:00:00Z"), b = Date.parse(desde + "T00:00:00Z");
+    return Number.isFinite(a) && Number.isFinite(b) ? Math.round((a - b) / 86400000) : null;
+  };
+  /* Beneficio con el que se inicia ortodoncia, por palabras clave del nombre de la prestación */
+  const beneficioOrto = prest => {
+    const p = sinTildes(prest);
+    if (p.includes("FONASA")) {
+      const m = p.match(/FONASA\s*([A-D])\b/);
+      return { b: "FONASA", tramo: m ? m[1] : "" };
+    }
+    if (p.includes("TU PUENTE") || p.startsWith("PACK ORTODONCIA")) return { b: "TU PUENTE", tramo: "" };
+    if (p.startsWith("INSTALACION") && !p.includes("DISTALIZADOR") && (p.includes("BRACKET") || p.includes("ORTODON"))) return { b: "PARTICULAR", tramo: "" };
+    return { b: "APARATOLOGIA", tramo: "" };
+  };
+  const BENEF_ORDEN = ["FONASA", "TU PUENTE", "PARTICULAR", "APARATOLOGIA"];
+  const BENEF_LABEL = { FONASA: "Fonasa", "TU PUENTE": "Tarjeta TU PUENTE", PARTICULAR: "Particular", APARATOLOGIA: "Solo aparatología (aún sin instalación)" };
+  const CANAL_ORDEN = ["META", "GOOGLE", "REFERIDOS", "ORGANICO", "ANTIGUO", "SIN_ORIGEN", "REGISTRADO_ANTES"];
+  const CANAL_LABEL = { META: "Meta Ads", GOOGLE: "Google Ads", REFERIDOS: "Recomienda CEO", ORGANICO: "Orgánico", ANTIGUO: "Paciente Antiguo", OTRO: "Origen no reconocido", SIN_ORIGEN: "Sin origen", REGISTRADO_ANTES: "Registrado antes" };
+  const LANDING_LABEL = { ORTODONCIA: "Landing Ortodoncia", IMPLANTES: "Landing Implantes", REHABILITACION: "Landing Rehabilitación", SIN_TRAT: "Landing" };
+  const mediana = a => {
+    if (!a.length) return null;
+    const s = [...a].sort((x, y) => x - y), n = s.length;
+    return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+  };
+  const percentil75 = a => {
+    if (!a.length) return null;
+    const s = [...a].sort((x, y) => x - y);
+    return s[Math.ceil(0.75 * s.length) - 1];
+  };
+  function calcularExtras(per, acc, pn, presupuestos) {
+    const atendidos = pidsAtendidos(presupuestos || []);
+    const clasif = new Map();
+    const clasifDe = r => {
+      if (!clasif.has(r)) clasif.set(r, clasificarOrigen(r));
+      return clasif.get(r);
+    };
+    const canalFila = r => r[P_REF] === "" ? "SIN_ORIGEN" : clasifDe(r[P_REF]).canal;
+    const refPorPid = new Map();
+    pn.forEach(r => { if (!refPorPid.has(r[P_PID])) refPorPid.set(r[P_PID], r); });
+
+    /* 1) Alertas de calidad del dato de origen (mes seleccionado) */
+    const alertas = [];
+    pn.forEach(r => {
+      if (r[P_PER] !== per || r[P_REF] === "") return;
+      const c = clasifDe(r[P_REF]);
+      if (c.canal === "OTRO") alertas.push({ pid: r[P_PID], ref: r[P_REF], canal: "OTRO", tipo: "NO RECONOCIDO" });
+      else if (!c.estandar) alertas.push({ pid: r[P_PID], ref: r[P_REF], canal: c.canal, landing: c.landing, tipo: "ESCRITURA DISTINTA" });
+    });
+    alertas.sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === "NO RECONOCIDO" ? -1 : 1));
+
+    /* 2) Atención por canal: captados vs. atendidos (mes y últimos 6 meses) */
+    const ventana6 = new Set([0, 1, 2, 3, 4, 5].map(i => shiftPeriodo(per, -i)));
+    const atCanales = ["META", "GOOGLE", "REFERIDOS", "ORGANICO", "ANTIGUO", "OTRO", "SIN_ORIGEN"];
+    const atencion = atCanales.map(c => ({ canal: c, mesCap: 0, mesAt: 0, semCap: 0, semAt: 0 }));
+    const atIdx = new Map(atencion.map(a => [a.canal, a]));
+    pn.forEach(r => {
+      if (!ventana6.has(r[P_PER])) return;
+      const a = atIdx.get(canalFila(r));
+      if (!a) return;
+      const at = atendidos.has(r[P_PID]) ? 1 : 0;
+      a.semCap++; a.semAt += at;
+      if (r[P_PER] === per) { a.mesCap++; a.mesAt += at; }
+    });
+
+    /* 3) Inicios de ortodoncia por beneficio y origen (primer inicio por paciente: aparatología o instalación) */
+    const inicios = new Map();
+    const primerImpl = new Map(), primerRehab = new Map();
+    for (const f of acc) {
+      const fec = isoFecha(f[A_FEC]);
+      if (esInicioOrtodoncia(f[A_PRE])) {
+        const be = beneficioOrto(f[A_PRE]);
+        let e = inicios.get(f[A_PID]);
+        if (!e) { e = { pid: f[A_PID], fec: "", per: "", b: be.b, tramo: be.tramo }; inicios.set(f[A_PID], e); }
+        const clave = (fec || f[A_PER]) + "|" + f[A_PER];
+        if (!e.clave || clave < e.clave) { e.clave = clave; e.fec = fec; e.per = f[A_PER]; }
+        if (BENEF_ORDEN.indexOf(be.b) < BENEF_ORDEN.indexOf(e.b) || (be.b === e.b && !e.tramo && be.tramo)) { e.b = be.b; e.tramo = be.tramo; }
+      }
+      if (fec) {
+        if (f[A_CAT] === "IMPLANTOLOGÍA" && f[A_PZA] && PIEZA_RE.test(f[A_PZA]) && esImplanteValido(f[A_PRE])) {
+          if (!primerImpl.has(f[A_PID]) || fec < primerImpl.get(f[A_PID])) primerImpl.set(f[A_PID], fec);
+        }
+        if (categoriaEfectiva(f) === "REHABILITACIÓN ORAL") {
+          if (!primerRehab.has(f[A_PID]) || fec < primerRehab.get(f[A_PID])) primerRehab.set(f[A_PID], fec);
+        }
+      }
+    }
+    const matriz = {};
+    BENEF_ORDEN.forEach(b => { matriz[b] = {}; CANAL_ORDEN.forEach(c => { matriz[b][c] = 0; }); });
+    const detalle = [];
+    inicios.forEach(e => {
+      if (e.per !== per) return;
+      const r = refPorPid.get(e.pid);
+      let canal = "REGISTRADO_ANTES", landing = "";
+      if (r) {
+        canal = r[P_REF] === "" ? "SIN_ORIGEN" : clasifDe(r[P_REF]).canal;
+        if (canal === "OTRO") canal = "SIN_ORIGEN";
+        landing = r[P_REF] === "" ? "" : clasifDe(r[P_REF]).landing || "";
+      }
+      matriz[e.b][canal]++;
+      const afil = r && r[P_FEC] ? isoFecha(r[P_FEC]) : "";
+      detalle.push({ fec: e.fec, pid: e.pid, b: e.b, tramo: e.tramo, canal, landing, dias: afil && e.fec ? diasEntre(e.fec, afil) : null });
+    });
+    detalle.sort((a, b) => (a.fec < b.fec ? -1 : a.fec > b.fec ? 1 : 0));
+
+    /* 4) Tiempo desde la afiliación hasta el primer tratamiento clave, por canal (cohortes de los últimos 6 meses) */
+    const tiemposCanales = ["META", "GOOGLE", "REFERIDOS", "ORGANICO", "ANTIGUO", "TODOS"];
+    const acumT = new Map(tiemposCanales.map(c => [c, { cohorte: 0, ORTO: [], IMPL: [], REHAB: [] }]));
+    let hayFechas = false;
+    pn.forEach(r => {
+      if (!ventana6.has(r[P_PER])) return;
+      const afil = isoFecha(r[P_FEC]);
+      if (!afil) return;
+      hayFechas = true;
+      const canal = canalFila(r);
+      const destinos = [acumT.get("TODOS")];
+      if (acumT.has(canal)) destinos.push(acumT.get(canal));
+      const pid = r[P_PID];
+      const ev = { ORTO: inicios.get(pid)?.fec, IMPL: primerImpl.get(pid), REHAB: primerRehab.get(pid) };
+      destinos.forEach(d => {
+        d.cohorte++;
+        for (const k of ["ORTO", "IMPL", "REHAB"]) {
+          if (!ev[k]) continue;
+          const dd = diasEntre(ev[k], afil);
+          if (dd !== null && dd >= 0) d[k].push(dd);
+        }
+      });
+    });
+    const tiempos = tiemposCanales.map(c => {
+      const d = acumT.get(c);
+      const f = k => ({ n: d[k].length, mediana: mediana(d[k]), p75: percentil75(d[k]) });
+      return { canal: c, cohorte: d.cohorte, orto: f("ORTO"), impl: f("IMPL"), rehab: f("REHAB") };
+    });
+    return { alertas, atencion, matriz, detalle, tiempos, hayFechas, totalInicios: detalle.length };
+  }
+  const PubExtras = ({ E }) => {
+    if (!E) return null;
+    const h = React.createElement;
+    const pctF = (a, b) => b ? pct(a / b, 0) : "—";
+    const tabla = (cab, filas, opts = {}) => h("div", { style: { overflowX: "auto", maxHeight: opts.maxH, overflowY: opts.maxH ? "auto" : undefined } }, h("table", null, h("thead", null, h("tr", null, cab.map((c, i) => h("th", { key: i, className: c.num ? "num" : undefined }, c.t)))), h("tbody", null, filas)));
+    const nota = t => h("div", { style: { fontSize: 11, color: "var(--dim)", margin: "10px 2px 26px", lineHeight: 1.5 } }, t);
+    const tdN = (v, st) => ({ v, st });
+    const fila = (key, celdas) => h("tr", { key }, celdas.map((c, i) => h("td", { key: i, className: i === 0 ? undefined : "num", style: c && c.st ? c.st : undefined }, c && c.v !== undefined ? c.v : c)));
+    const sub = (k, l) => (k ? " · " + (LANDING_LABEL[l] || "Landing") : "");
+    return h(React.Fragment, null,
+      /* Alertas de origen */
+      h(SecTitle, { color: "var(--warn)", right: h("span", { style: { fontSize: 11, color: "var(--dim)" } }, "mes seleccionado") }, "ALERTAS DE ORIGEN"),
+      h(Panel, { style: { overflow: "hidden", marginBottom: 8 } }, E.alertas.length === 0
+        ? h("div", { style: { padding: "14px 16px", fontSize: 13, color: "var(--dim)" } }, "Sin alertas: todas las referencias del mes se escribieron como el estándar.")
+        : tabla([{ t: "# Paciente" }, { t: "Referencia registrada" }, { t: "El panel la interpretó como" }, { t: "Estado" }],
+          E.alertas.map((a, i) => h("tr", { key: i }, h("td", null, a.pid), h("td", null, a.ref), h("td", null, a.canal === "OTRO" ? "— (no se cuenta en ningún canal)" : (CANAL_LABEL[a.canal] || a.canal) + (a.landing ? " · " + (LANDING_LABEL[a.landing] || "Landing") : "")), h("td", { style: { color: a.tipo === "NO RECONOCIDO" ? "var(--bad)" : "var(--warn)" } }, a.tipo === "NO RECONOCIDO" ? "No reconocido" : "Escritura distinta"))), { maxH: 280 })),
+      nota("Estas referencias se salen del estándar de Dentalink (Redes Sociales, Google, Referido, Orgánico, Paciente Antiguo, Meta Landing …). Las de “Escritura distinta” el panel las cuenta bien igual (corrige mayúsculas, tildes y errores de tipeo); las “No reconocidas” no suman a ningún canal hasta corregirlas en Dentalink."),
+      /* Atención por canal */
+      h(SecTitle, { color: "var(--meta)", right: h("span", { style: { fontSize: 11, color: "var(--dim)" } }, "calidad del lead") }, "CAPTADOS Y ATENDIDOS POR CANAL"),
+      h(Panel, { style: { overflow: "hidden", marginBottom: 8 } }, tabla([{ t: "Canal" }, { t: "Captados mes", num: 1 }, { t: "Atendidos", num: 1 }, { t: "% atención", num: 1 }, { t: "Captados 6M", num: 1 }, { t: "Atendidos 6M", num: 1 }, { t: "% atención 6M", num: 1 }],
+        E.atencion.filter(a => a.semCap > 0).map(a => fila(a.canal, [CANAL_LABEL[a.canal], ent(a.mesCap), ent(a.mesAt), pctF(a.mesAt, a.mesCap), ent(a.semCap), ent(a.semAt), pctF(a.semAt, a.semCap)])))),
+      nota("Atendido = tiene presupuesto generado con fecha de afiliación (asistió a su evaluación). Un % de atención bajo indica leads que se registran pero no llegan a la clínica."),
+      /* Beneficio de ortodoncia */
+      h(SecTitle, { color: "var(--meta)", right: h("span", { style: { fontSize: 11, color: "var(--dim)" } }, E.totalInicios + " casos nuevos en el mes") }, "INICIOS DE ORTODONCIA POR BENEFICIO Y ORIGEN"),
+      h(Panel, { style: { overflow: "hidden", marginBottom: 8 } }, E.totalInicios === 0
+        ? h("div", { style: { padding: "14px 16px", fontSize: 13, color: "var(--dim)" } }, "No hay inicios de ortodoncia en este mes.")
+        : tabla([{ t: "Beneficio" }, ...CANAL_ORDEN.map(c => ({ t: CANAL_LABEL[c], num: 1 })), { t: "Total", num: 1 }],
+          [...BENEF_ORDEN.map(b => fila(b, [BENEF_LABEL[b], ...CANAL_ORDEN.map(c => ent(E.matriz[b][c])), ent(CANAL_ORDEN.reduce((s, c) => s + E.matriz[b][c], 0))])),
+            fila("tot", [{ v: "Total", st: { color: "var(--bone)", fontWeight: 600 } }, ...CANAL_ORDEN.map(c => ent(BENEF_ORDEN.reduce((s, b) => s + E.matriz[b][c], 0))), ent(E.totalInicios)])])),
+      E.totalInicios > 0 && h(Panel, { style: { overflow: "hidden", marginBottom: 8, marginTop: 10 } }, tabla([{ t: "Fecha inicio" }, { t: "# Paciente" }, { t: "Beneficio" }, { t: "Origen" }, { t: "Días desde afiliación", num: 1 }],
+        E.detalle.map((d, i) => h("tr", { key: i }, h("td", null, d.fec || "—"), h("td", null, d.pid), h("td", null, BENEF_LABEL[d.b].split(" (")[0] + (d.tramo ? " " + d.tramo : "")), h("td", null, (CANAL_LABEL[d.canal] || d.canal) + sub(d.landing, d.landing)), h("td", { className: "num" }, d.dias === null ? "—" : ent(d.dias)))), { maxH: 300 })),
+      nota("Se cuenta un solo inicio por paciente, en su primera prestación de ortodoncia (aparatología o instalación). Si partió con aparatología y después se instala con Fonasa o TU PUENTE, el caso queda en el mes de la aparatología y el beneficio se actualiza cuando aparece la instalación. “Registrado antes” = el paciente no figura en Pacientes Nuevos cargados. Caja Los Andes no se distingue: solo existe como medio de pago."),
+      /* Tiempos */
+      h(SecTitle, { color: "var(--meta)", right: h("span", { style: { fontSize: 11, color: "var(--dim)" } }, "pacientes captados en los últimos 6 meses") }, "DÍAS DESDE LA AFILIACIÓN AL TRATAMIENTO CLAVE"),
+      h(Panel, { style: { overflow: "hidden", marginBottom: 8 } }, !E.hayFechas
+        ? h("div", { style: { padding: "14px 16px", fontSize: 13, color: "var(--dim)", lineHeight: 1.5 } }, "Aún no hay fechas de afiliación guardadas. Crea la columna en Supabase y vuelve a cargar los archivos de Pacientes Nuevos (ver Datos) para activar este cuadro.")
+        : tabla([{ t: "Canal" }, { t: "Captados", num: 1 }, { t: "Ortodoncia (mediana · P75 · n)", num: 1 }, { t: "Implantes (mediana · P75 · n)", num: 1 }, { t: "Rehabilitación (mediana · P75 · n)", num: 1 }],
+          E.tiempos.filter(t => t.cohorte > 0).map(t => {
+            const c = x => x.n ? Math.round(x.mediana) + " d · " + Math.round(x.p75) + " d · " + x.n : "—";
+            return fila(t.canal, [t.canal === "TODOS" ? { v: "Todos los canales", st: { color: "var(--bone)", fontWeight: 600 } } : CANAL_LABEL[t.canal], ent(t.cohorte), c(t.orto), c(t.impl), c(t.rehab)]);
+          }))),
+      nota("Solo cuenta pacientes que ya iniciaron ese tratamiento (n); los que todavía no lo inician no entran, así que los meses recientes subestiman el plazo real. Sirve para saber cuándo una cohorte está “madura” antes de juzgar un canal. Implantes: primera pieza instalada (excluye corona y pilar sobre implante). Rehabilitación: primera prestación de la categoría."));
+  };
+
   function construirIndices(acc, pn) {
     const periodosAcc = acc.map(f => f[A_PER]).filter(Boolean);
     const minPeriodoAcc = periodosAcc.length ? periodosAcc.reduce((a, b) => a < b ? a : b) : null;
@@ -1812,6 +2029,7 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
     const periodos = useMemo(() => [...new Set([...periodosAcc, ...periodosPn])].sort(), [periodosAcc, periodosPn]);
     const idx = useMemo(() => construirIndices(acc, pn), [acc, pn]);
     const K = useMemo(() => periodo ? calcularPeriodo(periodo, acc, pn, inversion, idx, presupuestos) : null, [periodo, acc, pn, inversion, idx, presupuestos]);
+    const extras = useMemo(() => periodo ? calcularExtras(periodo, acc, pn, presupuestos) : null, [periodo, acc, pn, presupuestos]);
     const V = useMemo(() => periodo ? calcularVentanas(periodo, acc, afiliados) : null, [periodo, acc, afiliados]);
     const ingresoEfectivo = useMemo(() => periodo ? calcularIngresoEfectivo(periodo, pagos) : 0, [periodo, pagos]);
     const ivPeriodo = inversion[periodo] || {};
@@ -3119,7 +3337,9 @@ if (!window.Recharts) throw new Error("Recharts no cargó. Revisa tu conexión a
         margin: "10px 2px 26px",
         lineHeight: 1.5
       }
-    }, "Un mismo paciente puede contar en m\xE1s de una columna si tuvo varios tipos de tratamiento. Mide qu\xE9 ha consumido, desde que fue captado hasta hoy, cada paciente de ese mes \u2014 los \xFAltimos 1-2 meses se ven bajos porque esos pacientes todav\xEDa est\xE1n decidiendo o en curso, no porque el canal sea peor."), /*#__PURE__*/React.createElement(SecTitle, {
+    }, "Un mismo paciente puede contar en m\xE1s de una columna si tuvo varios tipos de tratamiento. Mide qu\xE9 ha consumido, desde que fue captado hasta hoy, cada paciente de ese mes \u2014 los \xFAltimos 1-2 meses se ven bajos porque esos pacientes todav\xEDa est\xE1n decidiendo o en curso, no porque el canal sea peor."), /*#__PURE__*/React.createElement(PubExtras, {
+      E: extras
+    }), /*#__PURE__*/React.createElement(SecTitle, {
       color: "var(--meta)",
       right: /*#__PURE__*/React.createElement(SelectorRango, {
         valor: rangoInversion,
